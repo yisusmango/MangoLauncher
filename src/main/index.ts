@@ -32,7 +32,6 @@ interface VersionManifest {
   versions: MinecraftVersion[]
 }
 
-// NUEVO: Interfaz de Settings
 interface AppSettings {
   javaMinMemory: string
   javaMaxMemory: string
@@ -41,7 +40,7 @@ interface AppSettings {
 }
 
 const instancesFile = path.join(app.getPath('userData'), 'instances.json')
-const settingsFile = path.join(app.getPath('userData'), 'settings.json') // NUEVO: Archivo de configuración
+const settingsFile = path.join(app.getPath('userData'), 'settings.json') 
 
 const sanitizeFolderName = (name: string) => {
   return name.toLowerCase()
@@ -49,7 +48,6 @@ const sanitizeFolderName = (name: string) => {
     .replace(/[^a-z0-9_]/g, ''); 
 }
 
-// NUEVO: Funciones para leer y guardar Settings
 const defaultSettings: AppSettings = {
   javaMinMemory: '2',
   javaMaxMemory: '4',
@@ -106,6 +104,38 @@ async function fetchMinecraftVersions(): Promise<string[]> {
   }
 }
 
+// === GESTOR DE FABRIC ===
+async function setupFabric(instancePath: string, mcVersion: string): Promise<string | null> {
+  const modsPath = path.join(instancePath, 'mods')
+  await fs.mkdir(modsPath, { recursive: true }) 
+
+  try {
+    console.log(`[Fabric Setup] Buscando loader para la versión ${mcVersion}...`)
+    
+    const loaderRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}`)
+    const loaders = await loaderRes.json()
+    if (!loaders || loaders.length === 0) throw new Error('No hay loader de Fabric para esta versión')
+
+    const latestLoader = loaders[0].loader.version
+    const customVersionName = `fabric-${mcVersion}-${latestLoader}`
+
+    const versionDir = path.join(instancePath, 'versions', customVersionName)
+    await fs.mkdir(versionDir, { recursive: true })
+    const jsonPath = path.join(versionDir, `${customVersionName}.json`)
+
+    const profileRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${latestLoader}/profile/json`)
+    const profileJson = await profileRes.json()
+
+    await fs.writeFile(jsonPath, JSON.stringify(profileJson, null, 2))
+    console.log(`[Fabric Setup] Configurado correctamente: ${customVersionName}`)
+
+    return customVersionName
+  } catch (err) {
+    console.error('[Fabric Setup] Error al configurar Fabric:', err)
+    return null
+  }
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 900,
@@ -144,7 +174,6 @@ app.whenReady().then(() => {
 
   ipcMain.on('ping', () => console.log('pong'))
 
-  // NUEVO: Escuchadores para los settings
   ipcMain.handle('get-settings', async () => await getSettings())
   ipcMain.handle('save-settings', async (_, settings) => await saveSettings(settings))
 
@@ -183,7 +212,7 @@ app.whenReady().then(() => {
 
     try {
       const launcher = new Client()
-      const currentSettings = await getSettings() // <-- LEEMOS LA RAM DEL USUARIO AQUÍ
+      const currentSettings = await getSettings() 
 
       const downloadTracker: DownloadTracker = {
         lastBytesDownloaded: 0,
@@ -193,16 +222,26 @@ app.whenReady().then(() => {
       const instancePath = path.join(app.getPath('userData'), 'instances', instance.id)
       await fs.mkdir(instancePath, { recursive: true })
 
+      let customVersionName: string | undefined = undefined;
+      if (instance.loader === 'Fabric') {
+        event.sender.send('download-progress', {
+          percentage: 0, speed: '', phase: 'Configurando motor Fabric...', isDownloading: true
+        });
+        const result = await setupFabric(instancePath, instance.version);
+        if (result) customVersionName = result;
+      }
+
       const opts = {
         authorization: Authenticator.getAuth('DevPlayer'),
         root: instancePath,
         version: {
           number: instance.version,
-          type: 'release'
+          type: 'release',
+          custom: customVersionName 
         },
         memory: {
-          max: `${currentSettings.javaMaxMemory}G`, // <-- INYECTAMOS LA RAM MÁXIMA
-          min: `${currentSettings.javaMinMemory}G`  // <-- INYECTAMOS LA RAM MÍNIMA
+          max: `${currentSettings.javaMaxMemory}G`, 
+          min: `${currentSettings.javaMinMemory}G`  
         }
       }
 
@@ -213,10 +252,7 @@ app.whenReady().then(() => {
         if (!hasStarted) {
           hasStarted = true;
           event.sender.send('download-progress', {
-            percentage: 100,
-            speed: '',
-            phase: '¡Listo!',
-            isDownloading: false
+            percentage: 100, speed: '', phase: '¡Listo!', isDownloading: false
           });
         }
       })
@@ -241,10 +277,7 @@ app.whenReady().then(() => {
             downloadTracker.lastTimestamp = Date.now();
             
             event.sender.send('download-progress', {
-              percentage: 99,
-              speed: '...   ',
-              phase: 'Descargando sonidos y texturas...',
-              isDownloading: true
+              percentage: 99, speed: '...   ', phase: 'Descargando sonidos y texturas...', isDownloading: true
             });
             return; 
           }
@@ -262,17 +295,12 @@ app.whenReady().then(() => {
               downloadTracker.lastTimestamp = currentTimestamp
 
               const phaseNames: Record<string, string> = {
-                'classes': 'Librerías',
-                'jar': 'Cliente',
-                'natives': 'Nativos'
+                'classes': 'Librerías', 'jar': 'Cliente', 'natives': 'Nativos'
               };
               const phaseName = phaseNames[type] || type;
 
               event.sender.send('download-progress', {
-                percentage: percentage,
-                speed: `${speedMBps.toFixed(2)} MB/s`,
-                phase: `Descargando ${phaseName.toLowerCase()}...`,
-                isDownloading: true
+                percentage: percentage, speed: `${speedMBps.toFixed(2)} MB/s`, phase: `Descargando ${phaseName.toLowerCase()}...`, isDownloading: true
               })
             }
           }
@@ -281,7 +309,7 @@ app.whenReady().then(() => {
         }
       })
 
-      console.log(`[Main Process] Iniciando lanzamiento con ${currentSettings.javaMaxMemory}GB de RAM:`, opts)
+      console.log(`[Main Process] Iniciando lanzamiento con opciones:`, opts)
       launcher.launch(opts)
     } catch (error) {
       console.error(`[Main Process] Error al lanzar instancia: ${instance.name}`, error)

@@ -13,6 +13,7 @@ interface MinecraftInstance {
 interface CreateInstanceFormData {
   name: string
   version: string
+  loader: string 
 }
 
 function InstancesView(): React.JSX.Element {
@@ -20,16 +21,17 @@ function InstancesView(): React.JSX.Element {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
   const [formData, setFormData] = useState<CreateInstanceFormData>({
     name: '',
-    version: ''
+    version: '',
+    loader: 'Vanilla' 
   })
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [versions, setVersions] = useState<string[]>([])
   const [isLoadingVersions, setIsLoadingVersions] = useState<boolean>(false)
 
-  // Load instances on mount
   useEffect(() => {
     const loadInstances = async (): Promise<void> => {
       try {
+        // @ts-ignore
         const loadedInstances = await window.api.getInstances()
         setInstances(loadedInstances)
       } catch (error) {
@@ -41,12 +43,12 @@ function InstancesView(): React.JSX.Element {
     loadInstances()
   }, [])
 
-  // Load versions when modal opens
   useEffect(() => {
     if (isModalOpen && versions.length === 0) {
       const loadVersions = async (): Promise<void> => {
         try {
           setIsLoadingVersions(true)
+          // @ts-ignore
           const fetchedVersions = await window.api.getMinecraftVersions()
           setVersions(fetchedVersions)
           if (fetchedVersions.length > 0 && !formData.version) {
@@ -73,14 +75,15 @@ function InstancesView(): React.JSX.Element {
     }
 
     try {
+      // @ts-ignore
       const updatedInstances = await window.api.createInstance({
         name: formData.name,
         version: formData.version,
-        loader: 'Vanilla',
-        icon: '📦'
+        loader: formData.loader,
+        icon: formData.loader === 'Fabric' ? '🧶' : '📦' 
       })
       setInstances(updatedInstances)
-      setFormData({ name: '', version: versions[0] || '' })
+      setFormData({ name: '', version: versions[0] || '', loader: 'Vanilla' })
       setIsModalOpen(false)
     } catch (error) {
       console.error('Error creating instance:', error)
@@ -98,11 +101,10 @@ function InstancesView(): React.JSX.Element {
 
   const handleDelete = async (id: string): Promise<void> => {
     const confirmDelete = confirm('¿Estás seguro que deseas eliminar esta instancia? Se borrarán todos sus archivos.')
-    if (!confirmDelete) {
-      return
-    }
+    if (!confirmDelete) return
 
     try {
+      // @ts-ignore
       const updatedInstances = await window.api.deleteInstance(id)
       setInstances(updatedInstances)
     } catch (error) {
@@ -178,31 +180,45 @@ function InstancesView(): React.JSX.Element {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Versión</label>
-                {isLoadingVersions ? (
-                  <div className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-500 text-sm flex items-center gap-2">
-                    <span className="inline-block w-4 h-4 border-2 border-zinc-600 border-t-indigo-500 rounded-full animate-spin"></span>
-                    Cargando versiones...
-                  </div>
-                ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Versión</label>
+                  {isLoadingVersions ? (
+                    <div className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-500 text-sm flex items-center gap-2">
+                      <span className="inline-block w-4 h-4 border-2 border-zinc-600 border-t-indigo-500 rounded-full animate-spin"></span>
+                    </div>
+                  ) : (
+                    <select
+                      name="version"
+                      value={formData.version}
+                      onChange={handleInputChange}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-50 focus:outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      {versions.length > 0 ? (
+                        versions.map((version) => (
+                          <option key={version} value={version}>
+                            {version}
+                          </option>
+                        ))
+                      ) : (
+                        <option disabled>N/A</option>
+                      )}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Instalación</label>
                   <select
-                    name="version"
-                    value={formData.version}
+                    name="loader"
+                    value={formData.loader}
                     onChange={handleInputChange}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-50 focus:outline-none focus:border-indigo-500 transition-colors"
                   >
-                    {versions.length > 0 ? (
-                      versions.map((version) => (
-                        <option key={version} value={version}>
-                          {version}
-                        </option>
-                      ))
-                    ) : (
-                      <option disabled>No versions available</option>
-                    )}
+                    <option value="Vanilla">Vanilla (Puro)</option>
+                    <option value="Fabric">Fabric (Mods)</option>
                   </select>
-                )}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
