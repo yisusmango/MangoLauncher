@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+
+# Archivos de compilación y salida
+out/
+dist/
+build/
+
+# Logs y archivos temporales
+*.log
+.DS_Store
+.dev-vars
+.env
+
+# Datos de usuario (¡Importante para no subir tus cuentas!)
+dev-data/
+instances/
