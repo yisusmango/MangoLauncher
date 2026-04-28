@@ -32,13 +32,49 @@ interface VersionManifest {
   versions: MinecraftVersion[]
 }
 
-const instancesFile = path.join(app.getPath('userData'), 'instances.json')
+// NUEVO: Interfaz de Settings
+interface AppSettings {
+  javaMinMemory: string
+  javaMaxMemory: string
+  theme: string
+  autoUpdate: boolean
+}
 
-// Función para limpiar el nombre y que sea apto para carpetas de Windows
+const instancesFile = path.join(app.getPath('userData'), 'instances.json')
+const settingsFile = path.join(app.getPath('userData'), 'settings.json') // NUEVO: Archivo de configuración
+
 const sanitizeFolderName = (name: string) => {
   return name.toLowerCase()
-    .replace(/\s+/g, '_') // Cambia espacios por guiones bajos
-    .replace(/[^a-z0-9_]/g, ''); // Quita caracteres especiales
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, ''); 
+}
+
+// NUEVO: Funciones para leer y guardar Settings
+const defaultSettings: AppSettings = {
+  javaMinMemory: '2',
+  javaMaxMemory: '4',
+  theme: 'dark',
+  autoUpdate: true
+}
+
+async function getSettings(): Promise<AppSettings> {
+  try {
+    const data = await fs.readFile(settingsFile, 'utf-8')
+    return { ...defaultSettings, ...JSON.parse(data) }
+  } catch {
+    return defaultSettings
+  }
+}
+
+async function saveSettings(settings: AppSettings): Promise<boolean> {
+  try {
+    await fs.mkdir(path.dirname(settingsFile), { recursive: true })
+    await fs.writeFile(settingsFile, JSON.stringify(settings, null, 2))
+    return true
+  } catch (error) {
+    console.error("Error guardando settings:", error)
+    return false
+  }
 }
 
 async function getInstancesFromFile(): Promise<MinecraftInstance[]> {
@@ -108,6 +144,10 @@ app.whenReady().then(() => {
 
   ipcMain.on('ping', () => console.log('pong'))
 
+  // NUEVO: Escuchadores para los settings
+  ipcMain.handle('get-settings', async () => await getSettings())
+  ipcMain.handle('save-settings', async (_, settings) => await saveSettings(settings))
+
   ipcMain.handle('get-instances', async () => {
     return await getInstancesFromFile()
   })
@@ -115,10 +155,8 @@ app.whenReady().then(() => {
   ipcMain.handle('create-instance', async (_, data) => {
     const instances = await getInstancesFromFile()
     
-    // Limpiamos el nombre base
     const baseFolderName = sanitizeFolderName(data.name) || 'instancia'
     
-    // LÓGICA INTELIGENTE: Buscamos si ya existe, y si es así, le ponemos un "_2", "_3", etc.
     let uniqueId = baseFolderName
     let counter = 2
     
@@ -145,6 +183,7 @@ app.whenReady().then(() => {
 
     try {
       const launcher = new Client()
+      const currentSettings = await getSettings() // <-- LEEMOS LA RAM DEL USUARIO AQUÍ
 
       const downloadTracker: DownloadTracker = {
         lastBytesDownloaded: 0,
@@ -162,17 +201,15 @@ app.whenReady().then(() => {
           type: 'release'
         },
         memory: {
-          max: '4G',
-          min: '2G'
+          max: `${currentSettings.javaMaxMemory}G`, // <-- INYECTAMOS LA RAM MÁXIMA
+          min: `${currentSettings.javaMinMemory}G`  // <-- INYECTAMOS LA RAM MÍNIMA
         }
       }
 
-      launcher.on('debug', (msg: string) => {
-        // console.log(`[Launcher Debug] ${msg}`)
-      })
+      launcher.on('debug', (_msg: string) => {})
 
       let hasStarted = false;
-      launcher.on('data', (msg: string) => {
+      launcher.on('data', (_msg: string) => {
         if (!hasStarted) {
           hasStarted = true;
           event.sender.send('download-progress', {
@@ -182,7 +219,6 @@ app.whenReady().then(() => {
             isDownloading: false
           });
         }
-        console.log(`[Launcher Data] ${msg}`)
       })
 
       let currentPhase = '';
@@ -200,7 +236,6 @@ app.whenReady().then(() => {
             downloadTracker.lastTimestamp = Date.now();
           }
 
-          // LA TRAMPA PARA LOS ASSETS
           if (type === 'assets') {
             downloadTracker.lastBytesDownloaded = current;
             downloadTracker.lastTimestamp = Date.now();
@@ -246,7 +281,7 @@ app.whenReady().then(() => {
         }
       })
 
-      console.log(`[Main Process] Iniciando lanzamiento con opciones:`, opts)
+      console.log(`[Main Process] Iniciando lanzamiento con ${currentSettings.javaMaxMemory}GB de RAM:`, opts)
       launcher.launch(opts)
     } catch (error) {
       console.error(`[Main Process] Error al lanzar instancia: ${instance.name}`, error)

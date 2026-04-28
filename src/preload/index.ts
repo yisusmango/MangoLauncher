@@ -22,6 +22,13 @@ interface CreateInstanceData {
   icon?: string
 }
 
+interface AppSettings {
+  javaMinMemory: string
+  javaMaxMemory: string
+  theme: string
+  autoUpdate: boolean
+}
+
 // Custom APIs for renderer
 const api = {
   launchInstance: (instance: MinecraftInstance): void => {
@@ -43,12 +50,16 @@ const api = {
     ipcRenderer.on('download-progress', (_, data: DownloadProgressData) => {
       callback(data)
     })
+  },
+  // NUEVO: Funciones para manejar los ajustes
+  getSettings: async (): Promise<AppSettings> => {
+    return await ipcRenderer.invoke('get-settings')
+  },
+  saveSettings: async (settings: AppSettings): Promise<boolean> => {
+    return await ipcRenderer.invoke('save-settings', settings)
   }
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)

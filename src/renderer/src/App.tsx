@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import Sidebar from './components/layout/Sidebar'
 import StatusBar from './components/layout/StatusBar'
 import InstancesView from './components/views/InstancesView'
+import DiscoverView from './components/views/DiscoverView'
+import SettingsView from './components/views/SettingsView'
+
+type ViewType = 'instances' | 'discover' | 'settings'
 
 interface AppState {
   currentUser: string
@@ -12,6 +16,7 @@ interface AppState {
 }
 
 function App(): React.JSX.Element {
+  const [currentView, setCurrentView] = useState<ViewType>('instances')
   const [appState, setAppState] = useState<AppState>({
     currentUser: 'Player123',
     downloadProgress: 0,
@@ -21,35 +26,50 @@ function App(): React.JSX.Element {
   })
 
   const handleNavigation = (route: string): void => {
-    console.log(`Navigating to: ${route}`)
+    if (route === 'instances' || route === 'discover' || route === 'settings') {
+      setCurrentView(route)
+      console.log(`Navigating to: ${route}`)
+    }
   }
 
   useEffect(() => {
-    // @ts-ignore - Ignoramos el tipado estricto del preload temporalmente
-    window.api.onDownloadProgress((data: any) => {
-      setAppState((prevState) => ({
-        ...prevState,
-        downloadProgress: data.percentage,
-        downloadSpeed: data.speed,
-        downloadPhase: data.phase || 'Descargando...',
-        // Si backend manda false, apagamos la barra. Si no manda nada, asumimos true.
-        isDownloading: data.isDownloading !== false 
-      }))
-    })
+    // Verificar que window.api existe antes de usarlo
+    if (typeof window !== 'undefined' && window.api) {
+      window.api.onDownloadProgress((data: any) => {
+        setAppState((prevState) => ({
+          ...prevState,
+          downloadProgress: data.percentage,
+          downloadSpeed: data.speed,
+          downloadPhase: data.phase || 'Descargando...',
+          isDownloading: data.isDownloading !== false 
+        }))
+      })
+    }
   }, [])
+
+  const renderView = (): React.JSX.Element => {
+    switch (currentView) {
+      case 'instances':
+        return <InstancesView />
+      case 'discover':
+        return <DiscoverView />
+      case 'settings':
+        return <SettingsView />
+      default:
+        return <InstancesView />
+    }
+  }
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-50">
       {/* Main Container */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <Sidebar onNavigate={handleNavigation} />
+        <Sidebar activeView={currentView} onNavigate={handleNavigation} />
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-auto bg-zinc-950">
-          <div className="p-8">
-            <InstancesView />
-          </div>
+          <div className="p-8">{renderView()}</div>
         </main>
       </div>
 

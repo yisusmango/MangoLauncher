@@ -1,5 +1,3 @@
-import { useState } from 'react'
-
 interface SidebarItem {
   id: string
   label: string
@@ -8,6 +6,7 @@ interface SidebarItem {
 }
 
 interface SidebarProps {
+  activeView: string
   onNavigate: (route: string) => void
 }
 
@@ -32,11 +31,8 @@ const sidebarItems: SidebarItem[] = [
   }
 ]
 
-function Sidebar({ onNavigate }: SidebarProps): React.JSX.Element {
-  const [activeItem, setActiveItem] = useState<string>('instances')
-
+function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
   const handleItemClick = (itemId: string): void => {
-    setActiveItem(itemId)
     onNavigate(itemId)
   }
 
@@ -44,7 +40,7 @@ function Sidebar({ onNavigate }: SidebarProps): React.JSX.Element {
     <aside className="w-16 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-4 gap-2">
       {/* Logo/Home Button */}
       <button
-        onClick={() => handleItemClick('home')}
+        onClick={() => handleItemClick('instances')}
         className="w-12 h-12 rounded-lg bg-indigo-500 hover:bg-indigo-600 transition-colors duration-200 flex items-center justify-center text-white font-bold text-lg mb-2 group relative"
         title="Home"
       >
@@ -63,7 +59,7 @@ function Sidebar({ onNavigate }: SidebarProps): React.JSX.Element {
           key={item.id}
           onClick={() => handleItemClick(item.id)}
           className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
-            activeItem === item.id
+            activeView === item.id
               ? 'bg-indigo-500 text-white'
               : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50'
           }`}
