@@ -29,6 +29,16 @@ interface AppSettings {
   autoUpdate: boolean
 }
 
+// Interfaz para la cuenta de usuario
+interface UserAccount {
+  type: 'microsoft' | 'offline'
+  username: string
+  uuid: string
+  access_token?: string
+  client_token?: string
+  profile?: any
+}
+
 // Custom APIs for renderer
 const api = {
   launchInstance: (instance: MinecraftInstance): void => {
@@ -51,12 +61,24 @@ const api = {
       callback(data)
     })
   },
-  // NUEVO: Funciones para manejar los ajustes
   getSettings: async (): Promise<AppSettings> => {
     return await ipcRenderer.invoke('get-settings')
   },
   saveSettings: async (settings: AppSettings): Promise<boolean> => {
     return await ipcRenderer.invoke('save-settings', settings)
+  },
+  // NUEVO: Funciones para manejar la autenticación
+  loginMicrosoft: async (): Promise<UserAccount | null> => {
+    return await ipcRenderer.invoke('login-microsoft')
+  },
+  loginOffline: async (username: string): Promise<UserAccount> => {
+    return await ipcRenderer.invoke('login-offline', username)
+  },
+  logout: async (): Promise<boolean> => {
+    return await ipcRenderer.invoke('logout')
+  },
+  getAccount: async (): Promise<UserAccount | null> => {
+    return await ipcRenderer.invoke('get-account')
   }
 }
 

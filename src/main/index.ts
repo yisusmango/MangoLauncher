@@ -4,6 +4,7 @@ import path from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Client, Authenticator } from 'minecraft-launcher-core'
+import * as msmc from 'msmc' // <-- LIBRERÍA DE MICROSOFT AÑADIDA
 import icon from '../../resources/icon.png?asset'
 
 interface DownloadTracker {
@@ -39,8 +40,19 @@ interface AppSettings {
   autoUpdate: boolean
 }
 
+// NUEVO: Interfaz de cuenta segura
+interface UserAccount {
+  type: 'microsoft' | 'offline'
+  username: string
+  uuid: string
+  access_token?: string
+  client_token?: string
+  profile?: any
+}
+
 const instancesFile = path.join(app.getPath('userData'), 'instances.json')
 const settingsFile = path.join(app.getPath('userData'), 'settings.json') 
+const authFile = path.join(app.getPath('userData'), 'auth.json') // <-- ARCHIVO DONDE SE GUARDA LA SESIÓN
 
 const sanitizeFolderName = (name: string) => {
   return name.toLowerCase()
@@ -53,6 +65,16 @@ const defaultSettings: AppSettings = {
   javaMaxMemory: '4',
   theme: 'dark',
   autoUpdate: true
+}
+
+// === GESTOR DE AUTENTICACIÓN ===
+async function getSavedAccount(): Promise<UserAccount | null> {
+  try {
+    const data = await fs.readFile(authFile, 'utf-8')
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
 }
 
 async function getSettings(): Promise<AppSettings> {
@@ -177,6 +199,50 @@ app.whenReady().then(() => {
   ipcMain.handle('get-settings', async () => await getSettings())
   ipcMain.handle('save-settings', async (_, settings) => await saveSettings(settings))
 
+  // NUEVOS ENDPOINTS DE AUTENTICACIÓN
+  ipcMain.handle('get-account', async () => await getSavedAccount())
+  
+  ipcMain.handle('login-offline', async (_, username: string) => {
+    const account: UserAccount = {
+      type: 'offline',
+      username: username || 'DevPlayer',
+      uuid: 'offline-uuid',
+    }
+    await fs.writeFile(authFile, JSON.stringify(account, null, 2))
+    return account
+  })
+
+  ipcMain.handle('login-microsoft', async () => {
+    try {
+      const authManager = new msmc.Auth("select_account");
+      const xboxManager = await authManager.launch("raw");
+      const token = await xboxManager.getMinecraft();
+      const mclcToken = token.mclc(); 
+
+      const account: UserAccount = {
+        type: 'microsoft',
+        username: mclcToken.name || 'PremiumPlayer', // <-- SOLUCIÓN: Valor por defecto añadido
+        uuid: mclcToken.uuid || 'unknown-uuid',      // <-- Prevenimos el mismo error para el UUID
+        access_token: mclcToken.access_token,
+        client_token: mclcToken.client_token || 'client_token',
+        profile: mclcToken
+      }
+      
+      await fs.writeFile(authFile, JSON.stringify(account, null, 2))
+      return account
+    } catch (err) {
+      console.error("Error en login Microsoft:", err)
+      return null
+    }
+  })
+
+  ipcMain.handle('logout', async () => {
+    try {
+      await fs.unlink(authFile)
+      return true
+    } catch { return false }
+  })
+
   ipcMain.handle('get-instances', async () => {
     return await getInstancesFromFile()
   })
@@ -213,6 +279,7 @@ app.whenReady().then(() => {
     try {
       const launcher = new Client()
       const currentSettings = await getSettings() 
+      const account = await getSavedAccount() // <-- LEEMOS LA CUENTA ACTIVA
 
       const downloadTracker: DownloadTracker = {
         lastBytesDownloaded: 0,
@@ -231,8 +298,25 @@ app.whenReady().then(() => {
         if (result) customVersionName = result;
       }
 
+      // LÓGICA DE INYECCIÓN DE SESIÓN
+      let auth;
+      if (account && account.type === 'microsoft') {
+        console.log(`[Main] Autenticando vía Microsoft API para el usuario: ${account.username}`)
+        auth = {
+          access_token: account.access_token,
+          client_token: account.client_token,
+          uuid: account.uuid,
+          name: account.username,
+          user_properties: '{}'
+        }
+      } else {
+        const offlineName = account?.username || 'DevPlayer'
+        console.log(`[Main] Autenticando en Modo Offline como: ${offlineName}`)
+        auth = Authenticator.getAuth(offlineName)
+      }
+
       const opts = {
-        authorization: Authenticator.getAuth('DevPlayer'),
+        authorization: auth as any, // <-- AQUÍ PASAMOS LA SESIÓN SEGURA
         root: instancePath,
         version: {
           number: instance.version,
@@ -260,8 +344,6 @@ app.whenReady().then(() => {
       let currentPhase = '';
       launcher.on('download-status', (status: Record<string, unknown>) => {
         try {
-          console.log(`[Raw Status] Tipo: ${status.type} | Descargado: ${status.current} / ${status.total}`);
-          
           const type = (status.type as string) || 'archivos';
           const current = (status.current as number) || 0;
           const total = (status.total as number) || 0;

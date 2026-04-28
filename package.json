@@ -25,6 +25,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "assert-plus": "^1.0.0",
     "minecraft-launcher-core": "^3.18.2",
+    "msmc": "^5.0.5",
     "request": "^2.88.2"
   },
   "devDependencies": {
