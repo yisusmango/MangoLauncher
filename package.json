@@ -41,7 +41,7 @@
     "autoprefixer": "^10.5.0",
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
-    "electron-vite": "^2.4.0",
+    "electron-vite": "latest",
     "eslint": "^9.21.0",
     "eslint-plugin-react": "^7.37.4",
     "postcss": "^8.4.14",
