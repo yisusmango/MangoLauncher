@@ -5,7 +5,7 @@ import DiscoverView from './components/views/DiscoverView'
 import SettingsView from './components/views/SettingsView'
 import UpdatesView from './components/views/UpdatesView'
 import UpdateToast from './components/layout/UpdateToast'
-import LogConsole from './components/layout/LogConsole' // <-- NUEVA IMPORTACIÓN
+import LogConsole from './components/layout/LogConsole'
 
 type ViewType = 'instances' | 'discover' | 'settings' | 'updates'
 
@@ -34,9 +34,23 @@ function App(): React.JSX.Element {
     isDownloading: false
   })
 
+  // === NAVEGACIÓN Y DISCORD RPC ===
   const handleNavigation = (route: string): void => {
     if (route === 'instances' || route === 'discover' || route === 'settings' || route === 'updates') {
       setCurrentView(route as ViewType)
+      
+      // Mapeo de estados para Discord
+      const statusMap: Record<string, string> = {
+        instances: 'Gestionando Instancias',
+        discover: 'Explorando Contenido',
+        settings: 'Configurando el Motor',
+        updates: 'Viendo Notas de Versión'
+      }
+      
+      // Enviar la actualización a Discord si la API está disponible
+      if (typeof window !== 'undefined' && window.api && window.api.updateDiscordStatus) {
+        window.api.updateDiscordStatus('Navegando en el Launcher', statusMap[route])
+      }
     }
   }
 
@@ -57,10 +71,8 @@ function App(): React.JSX.Element {
       window.api.onMinecraftLog((log: string) => {
         setLogs(prev => {
           const newLogs = [...prev, log]
-          // Mantenemos solo los últimos 500 logs para no saturar la RAM
           return newLogs.slice(-500)
         })
-        // Opcional: Abrir consola automáticamente si hay un error crítico
         if (log.includes('[ERROR]')) setIsConsoleOpen(true)
       })
 

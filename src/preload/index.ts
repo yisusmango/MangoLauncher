@@ -106,11 +106,16 @@ const api = {
     ipcRenderer.send('install-update')
   },
 
-  // === NUEVO: Controlador de Logs de Minecraft ===
+  // === Controlador de Logs de Minecraft ===
   onMinecraftLog: (callback: (log: string) => void): void => {
     ipcRenderer.on('minecraft-log', (_, log) => {
       callback(log)
     })
+  },
+
+  // === NUEVO: Controlador de Discord RPC ===
+  updateDiscordStatus: (details: string, state: string): void => {
+    ipcRenderer.send('update-discord-rpc', { details, state })
   }
 }
 

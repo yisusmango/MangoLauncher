@@ -68,8 +68,11 @@ declare global {
       onUpdateReady: (callback: () => void) => void
       installUpdate: () => void
 
-      // === NUEVO: Controlador de Logs de Minecraft ===
+      // === Controlador de Logs de Minecraft ===
       onMinecraftLog: (callback: (log: string) => void) => void
+
+      // === NUEVO: Controlador de Discord RPC ===
+      updateDiscordStatus: (details: string, state: string) => void
     }
   }
 }

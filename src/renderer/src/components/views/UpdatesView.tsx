@@ -10,6 +10,18 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.0.7',
+    date: '28 de Abril, 2026',
+    title: 'Discord Rich Presence: Conectando a los Panas',
+    type: 'minor',
+    changes: [
+      'Integración nativa con Discord Rich Presence (RPC) para mostrar tu estado en tiempo real.',
+      'Estados dinámicos al navegar: Discord ahora muestra si estás configurando el motor, explorando mods o gestionando instancias.',
+      'Telemetría de juego en vivo: Al abrir Minecraft, tu perfil mostrará el nombre de la instancia, la versión exacta y el modloader (Vanilla/Fabric).',
+      'Integración del icono oficial de Mango Launcher en el perfil de usuario de Discord.'
+    ]
+  },  
+  {
     version: 'v1.0.6',
     date: '28 de Abril, 2026',
     title: 'Telemetría y Control Total',

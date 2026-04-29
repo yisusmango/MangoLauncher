@@ -1,6 +1,6 @@
 {
   "name": "mangolauncher",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Un launcher de Minecraft técnico y moderno.",
   "main": "./out/main/index.js",
   "author": "yisusmango",
@@ -25,6 +25,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "assert-plus": "^1.0.0",
+    "discord-rpc": "^4.0.1",
     "electron-updater": "^6.8.3",
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5",

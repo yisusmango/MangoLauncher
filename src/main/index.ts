@@ -6,23 +6,19 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Client, Authenticator } from 'minecraft-launcher-core'
 import * as msmc from 'msmc'
 import { autoUpdater } from 'electron-updater'
+import DiscordRPC from 'discord-rpc' // <-- NUEVO: Importamos Discord RPC
 
 // --- CONFIGURACIÓN DE ACTUALIZACIONES ---
-autoUpdater.autoDownload = false // No descargar automáticamente, preguntar primero
+autoUpdater.autoDownload = false
 
 function checkUpdates(mainWindow: BrowserWindow): void {
-  // Iniciar búsqueda
   autoUpdater.checkForUpdatesAndNotify()
 
-  // 1. Ocultar el diálogo de Windows y enviar alerta al frontend
   autoUpdater.on('update-available', (info) => {
-    // Mandamos la versión al frontend
     mainWindow.webContents.send('update-available', info.version)
   })
 
-  // 2. Escuchar el progreso (opcional, por si luego quieres hacer una barra)
   autoUpdater.on('download-progress', (progressObj) => {
-    // Puedes reusar tu evento de descarga de Minecraft para la app
     mainWindow.webContents.send('download-progress', {
       percentage: Math.round(progressObj.percent),
       speed: `${(progressObj.bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`,
@@ -31,16 +27,46 @@ function checkUpdates(mainWindow: BrowserWindow): void {
     })
   })
 
-  // 3. Cuando termine, le avisamos al frontend para cambiar el botón a "Reiniciar"
   autoUpdater.on('update-downloaded', () => {
     mainWindow.webContents.send('update-ready')
   })
 
-  // Manejo de errores
   autoUpdater.on('error', (err) => {
     console.error('Error en el auto-updater:', err)
   })
 }
+
+// --- CONFIGURACIÓN DE DISCORD RPC ---
+// Reemplaza los números por el Application ID de tu bot en el Discord Developer Portal
+const clientId = '1498877731927101450' 
+DiscordRPC.register(clientId)
+
+const rpc = new DiscordRPC.Client({ transport: 'ipc' })
+let rpcStartTimestamp = new Date()
+
+async function setDiscordActivity(details: string, state: string, resetTime: boolean = false) {
+  if (!rpc) return;
+  if (resetTime) rpcStartTimestamp = new Date();
+  
+  try {
+    await rpc.setActivity({
+      details: details,
+      state: state,
+      startTimestamp: rpcStartTimestamp,
+      largeImageKey: 'mango_logo', // <-- Sube tu icono a Discord con este nombre exacto
+      largeImageText: 'Mango Launcher v1.0.6',
+      instance: false,
+    })
+  } catch (err) {
+    console.error('[Discord RPC] Error al actualizar estado:', err)
+  }
+}
+
+rpc.on('ready', () => {
+  console.log('[Discord RPC] Conectado exitosamente')
+  setDiscordActivity('Navegando en el Launcher', 'Menú Principal', true)
+})
+// ------------------------------------
 
 interface DownloadTracker {
   lastBytesDownloaded: number
@@ -75,7 +101,6 @@ interface AppSettings {
   autoUpdate: boolean
 }
 
-// === INTERFACES MULTI-CUENTA ===
 interface UserAccount {
   type: 'microsoft' | 'offline'
   username: string
@@ -107,7 +132,6 @@ const defaultSettings: AppSettings = {
   autoUpdate: true
 }
 
-// === GESTOR DE AUTENTICACIÓN MULTI-CUENTA ===
 async function getAuthData(): Promise<AuthData> {
   try {
     const data = await fs.readFile(authFile, 'utf-8')
@@ -186,7 +210,6 @@ async function fetchMinecraftVersions(): Promise<string[]> {
   }
 }
 
-// === GESTOR DE FABRIC ===
 async function setupFabric(instancePath: string, mcVersion: string): Promise<string | null> {
   const modsPath = path.join(instancePath, 'mods')
   await fs.mkdir(modsPath, { recursive: true }) 
@@ -254,6 +277,9 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+  
+  // <-- NUEVO: Inicializar conexión con Discord
+  rpc.login({ clientId }).catch(console.error)
 
   ipcMain.on('ping', () => console.log('pong'))
 
@@ -261,7 +287,6 @@ app.whenReady().then(() => {
   ipcMain.handle('save-settings', async (_, settings) => await saveSettings(settings))
   ipcMain.handle('get-auth-data', async () => await getAuthData())
   
-  // === COMANDOS DEL UPDATER PARA EL FRONTEND ===
   ipcMain.on('start-update-download', () => {
     autoUpdater.downloadUpdate()
   })
@@ -269,7 +294,6 @@ app.whenReady().then(() => {
   ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall()
   })
-  // ===========================================
 
   ipcMain.handle('login-offline', async (_, username: string) => {
     const data = await getAuthData()
@@ -395,7 +419,6 @@ app.whenReady().then(() => {
 
       let auth;
       if (account && account.type === 'microsoft') {
-        console.log(`[Main] Autenticando vía Microsoft API para el usuario: ${account.username}`)
         auth = {
           access_token: account.access_token,
           client_token: account.client_token,
@@ -405,7 +428,6 @@ app.whenReady().then(() => {
         }
       } else {
         const offlineName = account?.username || 'DevPlayer'
-        console.log(`[Main] Autenticando en Modo Offline como: ${offlineName}`)
         auth = Authenticator.getAuth(offlineName)
       }
 
@@ -423,14 +445,12 @@ app.whenReady().then(() => {
         }
       }
 
-      // === 1. Capturar mensajes de depuración del launcher ===
       launcher.on('debug', (msg: string) => {
         event.sender.send('minecraft-log', `[LAUNCHER] ${msg}`)
       })
 
       let hasStarted = false;
       
-      // === 2. Capturar la salida real (stdout) del juego de Minecraft ===
       launcher.on('data', (msg: string) => {
         if (!hasStarted) {
           hasStarted = true;
@@ -441,9 +461,10 @@ app.whenReady().then(() => {
         event.sender.send('minecraft-log', msg)
       })
 
-      // === 3. Capturar si el juego se cierra por un crash o finaliza ===
+      // <-- NUEVO: Al cerrar el juego, Discord vuelve a modo inactivo
       launcher.on('close', (code: number) => {
         event.sender.send('minecraft-log', `[SISTEMA] El juego se cerró con el código: ${code}`)
+        setDiscordActivity('Navegando en el Launcher', 'Menú Principal', true)
       })
 
       let currentPhase = '';
@@ -497,6 +518,10 @@ app.whenReady().then(() => {
       })
 
       console.log(`[Main Process] Iniciando lanzamiento con opciones:`, opts)
+      
+      // <-- NUEVO: Al iniciar, Discord muestra la versión y el modloader
+      setDiscordActivity(`Jugando: ${instance.name}`, `Versión: ${instance.version} [${instance.loader}]`, true)
+      
       launcher.launch(opts)
     } catch (error) {
       console.error(`[Main Process] Error al lanzar instancia: ${instance.name}`, error)
