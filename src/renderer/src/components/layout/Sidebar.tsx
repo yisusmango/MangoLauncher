@@ -10,12 +10,12 @@ interface SidebarItem {
 interface SidebarProps {
   activeView: string
   onNavigate: (route: string) => void
-  onToggleConsole: () => void // <-- Nueva prop para abrir la consola
-  isConsoleOpen: boolean      // <-- Nueva prop para saber si está abierta
+  onToggleConsole: () => void 
+  isConsoleOpen: boolean      
 }
 
 interface UserAccount {
-  type: 'microsoft' | 'offline' | 'premium' // <-- Agrega 'premium' aquí
+  type: 'microsoft' | 'offline' | 'premium' 
   username: string
   uuid: string
   access_token?: string
@@ -28,6 +28,12 @@ interface AuthData {
   accounts: UserAccount[]
 }
 
+// NUEVO: Interfaz para leer el playtime de las instancias
+interface MinecraftInstance {
+  id: string
+  playtime: number
+}
+
 const sidebarItems: SidebarItem[] = [
   { id: 'instances', label: 'Instancias', icon: '📦', tooltip: 'Gestionar instancias de juego' },
   { id: 'discover', label: 'Descubrir', icon: '🔍', tooltip: 'Explorar mods y contenido' },
@@ -35,15 +41,46 @@ const sidebarItems: SidebarItem[] = [
   { id: 'settings', label: 'Ajustes', icon: '⚙️', tooltip: 'Ajustes de la aplicación' }
 ]
 
+// HELPER: Formato ultra corto para el cuadrito (ej: 45m, 12h, +99h)
+function formatPlaytimeMini(totalSeconds: number): string {
+  if (!totalSeconds || totalSeconds === 0) return '0m'
+  const hours = Math.floor(totalSeconds / 3600)
+  if (hours > 99) return '+99h'
+  if (hours > 0) return `${hours}h`
+  const minutes = Math.floor(totalSeconds / 60)
+  return `${minutes}m`
+}
+
+// HELPER: Formato detallado para el Tooltip (ej: 12d 5h 30m)
+function formatPlaytimeDetailed(totalSeconds: number): string {
+  if (!totalSeconds || totalSeconds === 0) return '0 minutos'
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+
+  // SOLUCIÓN: Agregamos ": string[]" para definir el tipo explícitamente
+  const parts: string[] = []
+  
+  if (days > 0) parts.push(`${days}d`)
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`)
+  
+  return parts.join(' ')
+}
+
 function Sidebar({ activeView, onNavigate, onToggleConsole, isConsoleOpen }: SidebarProps): React.JSX.Element {
   const [authData, setAuthData] = useState<AuthData>({ selectedId: null, accounts: [] })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [offlineName, setOfflineName] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  
+  // NUEVO: Estado para almacenar la suma total de segundos jugados
+  const [totalPlaytime, setTotalPlaytime] = useState<number>(0)
 
   const activeAccount = authData.accounts.find(a => a.uuid === authData.selectedId)
 
+  // Efecto para Autenticación
   useEffect(() => {
     const fetchAuth = async () => {
       // @ts-ignore
@@ -51,6 +88,27 @@ function Sidebar({ activeView, onNavigate, onToggleConsole, isConsoleOpen }: Sid
       if (data) setAuthData(data)
     }
     fetchAuth()
+  }, [])
+
+  // NUEVO: Efecto para calcular el Playtime Total con actualización automática
+  useEffect(() => {
+    const fetchPlaytime = async () => {
+      try {
+        // @ts-ignore
+        const instances: MinecraftInstance[] = await window.api.getInstances()
+        const total = instances.reduce((acc, curr) => acc + (curr.playtime || 0), 0)
+        setTotalPlaytime(total)
+      } catch (error) {
+        console.error('Error fetching playtime:', error)
+      }
+    }
+    
+    // Cargar al inicio
+    fetchPlaytime()
+    
+    // Revisar cada 10 segundos para actualizar si acabas de cerrar un juego
+    const interval = setInterval(fetchPlaytime, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleCloseModal = () => {
@@ -150,7 +208,6 @@ function Sidebar({ activeView, onNavigate, onToggleConsole, isConsoleOpen }: Sid
 
       <div className="flex-1"></div>
 
-      {/* --- NUEVO BOTÓN DE CONSOLA --- */}
       <button
         onClick={onToggleConsole}
         className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
@@ -164,6 +221,22 @@ function Sidebar({ activeView, onNavigate, onToggleConsole, isConsoleOpen }: Sid
           Consola de Logs
         </span>
       </button>
+
+      <div className="w-8 h-px bg-zinc-800 my-2"></div>
+
+      {/* --- NUEVO: WIDGET DE TIEMPO TOTAL --- */}
+      <div className="w-12 h-12 rounded-lg flex flex-col items-center justify-center bg-zinc-900/50 border border-zinc-800 text-zinc-400 group relative cursor-default hover:border-indigo-500/50 hover:text-indigo-400 transition-colors shadow-sm">
+        <span className="text-xs mb-0.5">⏱️</span>
+        <span className="text-[10px] font-bold leading-none tracking-wider">
+          {formatPlaytimeMini(totalPlaytime)}
+        </span>
+        
+        {/* Tooltip detallado del Playtime */}
+        <span className="absolute left-full ml-2 p-2 bg-zinc-800 border border-zinc-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 flex flex-col gap-1 shadow-xl">
+          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Tiempo de Juego Total</span>
+          <span className="text-sm font-medium text-zinc-50">{formatPlaytimeDetailed(totalPlaytime)}</span>
+        </span>
+      </div>
 
       <div className="w-8 h-px bg-zinc-800 my-2"></div>
 

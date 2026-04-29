@@ -1,140 +1,47 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-interface DownloadProgressData {
-  percentage: number
-  speed: string
-  phase?: string
-  isDownloading?: boolean
-}
-
-interface MinecraftInstance {
-  id: string
-  name: string
-  version: string
-  loader: string
-  playtime: number
-  icon: string
-}
-
-interface CreateInstanceData {
-  name: string
-  version: string
-  loader?: string
-  icon?: string
-}
-
-interface AppSettings {
-  javaMinMemory: string
-  javaMaxMemory: string
-  theme: string
-  autoUpdate: boolean
-}
-
-interface UserAccount {
-  type: 'microsoft' | 'offline' | 'premium'
-  username: string
-  uuid: string
-  access_token?: string
-  client_token?: string
-  profile?: any
-}
-
-interface AuthData {
-  selectedId: string | null
-  accounts: UserAccount[]
-}
-
-// Nueva interfaz para las capturas de pantalla
-interface ScreenshotData {
-  name: string
-  path: string
-  url: string
-  date: number
-}
+// ... (todas las interfaces se mantienen igual) ...
+interface DownloadProgressData { percentage: number; speed: string; phase?: string; isDownloading?: boolean }
+interface MinecraftInstance { id: string; name: string; version: string; loader: string; playtime: number; icon: string }
+interface CreateInstanceData { name: string; version: string; loader?: string; icon?: string }
+interface AppSettings { javaMinMemory: string; javaMaxMemory: string; theme: string; autoUpdate: boolean }
+interface UserAccount { type: 'microsoft' | 'offline' | 'premium'; username: string; uuid: string; access_token?: string; client_token?: string; profile?: any }
+interface AuthData { selectedId: string | null; accounts: UserAccount[] }
+interface ScreenshotData { name: string; path: string; url: string; date: number }
+interface CleanLogsResult { success: boolean; mbFreed: number; message: string }
 
 const api = {
-  launchInstance: (instance: MinecraftInstance): void => {
-    ipcRenderer.send('launch-instance', instance)
-  },
-  getInstances: async (): Promise<MinecraftInstance[]> => {
-    return await ipcRenderer.invoke('get-instances')
-  },
-  createInstance: async (data: CreateInstanceData): Promise<MinecraftInstance[]> => {
-    return await ipcRenderer.invoke('create-instance', data)
-  },
-  getMinecraftVersions: async (): Promise<string[]> => {
-    return await ipcRenderer.invoke('get-minecraft-versions')
-  },
-  deleteInstance: async (id: string): Promise<MinecraftInstance[]> => {
-    return await ipcRenderer.invoke('delete-instance', id)
-  },
-  onDownloadProgress: (callback: (data: DownloadProgressData) => void): void => {
-    ipcRenderer.on('download-progress', (_, data: DownloadProgressData) => {
-      callback(data)
-    })
-  },
-  getSettings: async (): Promise<AppSettings> => {
-    return await ipcRenderer.invoke('get-settings')
-  },
-  saveSettings: async (settings: AppSettings): Promise<boolean> => {
-    return await ipcRenderer.invoke('save-settings', settings)
-  },
-  loginMicrosoft: async (): Promise<AuthData | null> => {
-    return await ipcRenderer.invoke('login-microsoft')
-  },
-  loginOffline: async (username: string): Promise<AuthData> => {
-    return await ipcRenderer.invoke('login-offline', username)
-  },
-  getAuthData: async (): Promise<AuthData> => {
-    return await ipcRenderer.invoke('get-auth-data')
-  },
-  switchAccount: async (uuid: string): Promise<AuthData> => {
-    return await ipcRenderer.invoke('switch-account', uuid)
-  },
-  removeAccount: async (uuid: string): Promise<AuthData> => {
-    return await ipcRenderer.invoke('remove-account', uuid)
-  },
+  launchInstance: (instance: MinecraftInstance): void => { ipcRenderer.send('launch-instance', instance) },
+  getInstances: async (): Promise<MinecraftInstance[]> => { return await ipcRenderer.invoke('get-instances') },
+  createInstance: async (data: CreateInstanceData): Promise<MinecraftInstance[]> => { return await ipcRenderer.invoke('create-instance', data) },
+  getMinecraftVersions: async (): Promise<string[]> => { return await ipcRenderer.invoke('get-minecraft-versions') },
+  deleteInstance: async (id: string): Promise<MinecraftInstance[]> => { return await ipcRenderer.invoke('delete-instance', id) },
+  onDownloadProgress: (callback: (data: DownloadProgressData) => void): void => { ipcRenderer.on('download-progress', (_, data) => { callback(data) }) },
+  getSettings: async (): Promise<AppSettings> => { return await ipcRenderer.invoke('get-settings') },
+  saveSettings: async (settings: AppSettings): Promise<boolean> => { return await ipcRenderer.invoke('save-settings', settings) },
+  loginMicrosoft: async (): Promise<AuthData | null> => { return await ipcRenderer.invoke('login-microsoft') },
+  loginOffline: async (username: string): Promise<AuthData> => { return await ipcRenderer.invoke('login-offline', username) },
+  getAuthData: async (): Promise<AuthData> => { return await ipcRenderer.invoke('get-auth-data') },
+  switchAccount: async (uuid: string): Promise<AuthData> => { return await ipcRenderer.invoke('switch-account', uuid) },
+  removeAccount: async (uuid: string): Promise<AuthData> => { return await ipcRenderer.invoke('remove-account', uuid) },
+  onUpdateAvailable: (callback: (version: string) => void): void => { ipcRenderer.on('update-available', (_, version) => { callback(version) }) },
+  startDownloadUpdate: (): void => { ipcRenderer.send('start-update-download') },
+  onUpdateReady: (callback: () => void): void => { ipcRenderer.on('update-ready', () => { callback() }) },
+  installUpdate: (): void => { ipcRenderer.send('install-update') },
+  onMinecraftLog: (callback: (log: string) => void): void => { ipcRenderer.on('minecraft-log', (_, log) => { callback(log) }) },
+  updateDiscordStatus: (details: string, state: string): void => { ipcRenderer.send('update-discord-rpc', { details, state }) },
+  getScreenshots: async (instanceId: string): Promise<ScreenshotData[]> => { return await ipcRenderer.invoke('get-screenshots', instanceId) },
+  deleteScreenshot: async (instanceId: string, fileName: string): Promise<boolean> => { return await ipcRenderer.invoke('delete-screenshot', instanceId, fileName) },
+  openScreenshotFolder: (instanceId: string): void => { ipcRenderer.send('open-screenshots-folder', instanceId) },
+  cleanInstanceLogs: async (instanceId: string): Promise<CleanLogsResult> => { return await ipcRenderer.invoke('clean-instance-logs', instanceId) },
 
-  // === Controladores del Updater ===
-  onUpdateAvailable: (callback: (version: string) => void): void => {
-    ipcRenderer.on('update-available', (_, version) => {
-      callback(version)
-    })
+  // === NUEVO: Controladores de la Ventana Secundaria ===
+  openCreateInstanceWindow: (): void => {
+    ipcRenderer.send('open-create-instance-window')
   },
-  startDownloadUpdate: (): void => {
-    ipcRenderer.send('start-update-download')
-  },
-  onUpdateReady: (callback: () => void): void => {
-    ipcRenderer.on('update-ready', () => {
-      callback()
-    })
-  },
-  installUpdate: (): void => {
-    ipcRenderer.send('install-update')
-  },
-
-  // === Controlador de Logs de Minecraft ===
-  onMinecraftLog: (callback: (log: string) => void): void => {
-    ipcRenderer.on('minecraft-log', (_, log) => {
-      callback(log)
-    })
-  },
-
-  // === Controlador de Discord RPC ===
-  updateDiscordStatus: (details: string, state: string): void => {
-    ipcRenderer.send('update-discord-rpc', { details, state })
-  },
-
-  // === NUEVO: Gestor de Capturas (Screenshots) ===
-  getScreenshots: async (instanceId: string): Promise<ScreenshotData[]> => {
-    return await ipcRenderer.invoke('get-screenshots', instanceId)
-  },
-  deleteScreenshot: async (instanceId: string, fileName: string): Promise<boolean> => {
-    return await ipcRenderer.invoke('delete-screenshot', instanceId, fileName)
-  },
-  openScreenshotFolder: (instanceId: string): void => {
-    ipcRenderer.send('open-screenshots-folder', instanceId)
+  closeCreateInstanceWindow: (): void => {
+    ipcRenderer.send('close-create-instance-window')
   }
 }
 

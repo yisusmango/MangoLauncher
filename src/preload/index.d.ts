@@ -44,12 +44,17 @@ interface AuthData {
   accounts: UserAccount[]
 }
 
-// Nueva interfaz para las capturas
 interface ScreenshotData {
   name: string
   path: string
   url: string
   date: number
+}
+
+interface CleanLogsResult {
+  success: boolean
+  mbFreed: number
+  message: string
 }
 
 declare global {
@@ -70,22 +75,24 @@ declare global {
       switchAccount: (uuid: string) => Promise<AuthData>
       removeAccount: (uuid: string) => Promise<AuthData>
       
-      // === Controladores del Updater ===
       onUpdateAvailable: (callback: (version: string) => void) => void
       startDownloadUpdate: () => void
       onUpdateReady: (callback: () => void) => void
       installUpdate: () => void
 
-      // === Controlador de Logs de Minecraft ===
       onMinecraftLog: (callback: (log: string) => void) => void
 
-      // === Controlador de Discord RPC ===
       updateDiscordStatus: (details: string, state: string) => void
 
-      // === NUEVO: Gestor de Capturas (Screenshots) ===
       getScreenshots: (instanceId: string) => Promise<ScreenshotData[]>
       deleteScreenshot: (instanceId: string, fileName: string) => Promise<boolean>
       openScreenshotFolder: (instanceId: string) => void
+
+      cleanInstanceLogs: (instanceId: string) => Promise<CleanLogsResult>
+
+      // === NUEVO: Controladores de la Ventana Secundaria ===
+      openCreateInstanceWindow: () => void
+      closeCreateInstanceWindow: () => void
     }
   }
 }

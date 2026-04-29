@@ -27,29 +27,64 @@ function getLoaderColor(loader: string): string {
   }
 }
 
+// Función para convertir segundos a un texto legible
+function formatPlaytime(totalSeconds: number): string {
+  if (!totalSeconds || totalSeconds === 0) return '0m'
+  
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
 function InstanceCard({ instance, onDelete }: InstanceCardProps): React.JSX.Element {
-  const [isHovered, setIsHovered] = useState<boolean>(false)
+  const [isCleaning, setIsCleaning] = useState<boolean>(false)
   const loaderColorClass = getLoaderColor(instance.loader)
 
-  const formattedPlaytime =
-    instance.playtime >= 24
-      ? `${Math.floor(instance.playtime / 24)}d ${instance.playtime % 24}h`
-      : `${instance.playtime}h`
+  const formattedPlaytime = formatPlaytime(instance.playtime)
+
+  const handleCleanLogs = async (e: React.MouseEvent): Promise<void> => {
+    e.stopPropagation() // Evita que el clic se confunda con doble clic
+    if (isCleaning) return
+
+    setIsCleaning(true)
+    try {
+      // @ts-ignore
+      const result = await window.api.cleanInstanceLogs(instance.id)
+      if (result.success) {
+        alert(result.message)
+      }
+    } catch (error) {
+      console.error('Error cleaning logs:', error)
+    } finally {
+      setIsCleaning(false)
+    }
+  }
+
+  // NUEVO: Función para lanzar el juego con doble clic
+  const handleLaunch = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    // @ts-ignore
+    window.api.launchInstance(instance)
+  }
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="relative w-full h-full group"
+      onDoubleClick={handleLaunch}
+      className="relative w-full h-full group cursor-pointer"
+      title="Doble clic para jugar"
     >
-      {/* Botón de Borrar - Separado y con Z-Index altísimo (50) */}
-      <div className="absolute top-2 right-2 z-50">
+      {/* Botón de Borrar Instancia */}
+      <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <button
           onClick={(e) => {
-            e.stopPropagation()
+            e.stopPropagation() // Evita que se dispare el doble clic
             onDelete(instance.id)
           }}
-          className="p-1.5 rounded-md bg-zinc-950/90 text-zinc-400 hover:text-white hover:bg-red-600 transition-colors duration-200 shadow-sm"
+          className="p-1.5 rounded-md bg-zinc-950/80 text-zinc-400 hover:text-white hover:bg-red-600 transition-colors duration-200 shadow-sm"
           title="Borrar instancia"
         >
           <svg
@@ -64,13 +99,10 @@ function InstanceCard({ instance, onDelete }: InstanceCardProps): React.JSX.Elem
         </button>
       </div>
 
-      {/* Contenedor Principal de la Tarjeta */}
+      {/* Contenedor Principal */}
       <div
-        className={`w-full h-48 bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 flex flex-col justify-between transition-all duration-200 ${
-          isHovered ? 'border-indigo-500 bg-zinc-900/80' : ''
-        }`}
+        className="w-full h-48 bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 flex flex-col justify-between transition-all duration-200 group-hover:border-indigo-500 group-hover:bg-zinc-800/30 group-hover:shadow-lg group-hover:shadow-indigo-500/10"
       >
-        {/* Header con Icono y Nombre */}
         <div className="flex items-start justify-between pr-8">
           <div className="flex flex-col items-start flex-1">
             <div className="text-3xl mb-2">{instance.icon || '📦'}</div>
@@ -80,44 +112,39 @@ function InstanceCard({ instance, onDelete }: InstanceCardProps): React.JSX.Elem
           </div>
         </div>
 
-        {/* Metadatos */}
         <div className="flex flex-col gap-2">
-          {/* Badge de Versión */}
           <div className="flex items-center gap-2">
             <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded border border-zinc-700">
               {instance.version}
             </span>
           </div>
 
-          {/* Badge de Loader */}
           <div className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${loaderColorClass} w-fit`}>
             <span className="font-medium">{instance.loader || 'Vanilla'}</span>
           </div>
 
-          {/* Playtime */}
-          <div className="text-xs text-zinc-500">
-            <span>⏱️ {formattedPlaytime}</span>
+          {/* Fila de Playtime y Botón de Limpieza */}
+          <div className="flex items-center justify-between mt-1">
+            <div className="text-xs text-zinc-500 font-medium flex items-center gap-1">
+              <span>⏱️ {formattedPlaytime}</span>
+            </div>
+            
+            <button
+              onClick={handleCleanLogs}
+              disabled={isCleaning}
+              className={`p-1.5 rounded bg-zinc-800/50 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all duration-200 group/clean ${
+                isCleaning ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              title="Limpiar archivos de logs (.gz)"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className={`text-xs transition-transform duration-300 ${isCleaning ? 'animate-spin' : 'group-hover/clean:rotate-12'}`}>
+                  {isCleaning ? '⏳' : '🧹'}
+                </span>
+              </div>
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Overlay de Jugar - Con Z-Index bajo (10) para no tapar la X de borrar */}
-      <div
-        className={`absolute inset-0 bg-zinc-950/80 z-10 flex items-center justify-center rounded-lg transition-opacity duration-200 ${
-          isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            // @ts-ignore
-            window.api.launchInstance(instance)
-          }}
-          className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2 shadow-lg"
-        >
-          <span>▶</span>
-          Jugar
-        </button>
       </div>
     </div>
   )

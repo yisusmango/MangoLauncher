@@ -8,6 +8,9 @@ import GalleryView from './components/views/GalleryView'
 import UpdateToast from './components/layout/UpdateToast'
 import LogConsole from './components/layout/LogConsole'
 
+// NUEVO: Importamos la vista dedicada para la ventana secundaria
+import CreateInstanceWindow from './components/views/CreateInstanceWindow'
+
 type ViewType = 'instances' | 'discover' | 'settings' | 'updates' | 'gallery'
 
 interface AppState {
@@ -18,6 +21,9 @@ interface AppState {
 }
 
 function App(): React.JSX.Element {
+  // === NUEVO: DETECCIÓN DE VENTANA ===
+  const [isSecondaryWindow, setIsSecondaryWindow] = useState(false)
+
   const [currentView, setCurrentView] = useState<ViewType>('instances')
   
   // === ESTADOS PARA LA CONSOLA ===
@@ -35,12 +41,18 @@ function App(): React.JSX.Element {
     isDownloading: false
   })
 
+  useEffect(() => {
+    // Detectamos si esta ventana fue abierta con el hash '#create-instance' o '#/create-instance'
+    if (window.location.hash.includes('create-instance')) {
+      setIsSecondaryWindow(true)
+    }
+  }, [])
+
   // === NAVEGACIÓN Y DISCORD RPC ===
   const handleNavigation = (route: string): void => {
     if (route === 'instances' || route === 'discover' || route === 'settings' || route === 'updates' || route === 'gallery') {
       setCurrentView(route as ViewType)
       
-      // Mapeo de estados para Discord
       const statusMap: Record<string, string> = {
         instances: 'Gestionando Instancias',
         discover: 'Explorando Contenido',
@@ -49,7 +61,6 @@ function App(): React.JSX.Element {
         gallery: 'Viendo sus Capturas'
       }
       
-      // Enviar la actualización a Discord si la API está disponible
       if (typeof window !== 'undefined' && window.api && window.api.updateDiscordStatus) {
         window.api.updateDiscordStatus('Navegando en el Launcher', statusMap[route])
       }
@@ -57,8 +68,10 @@ function App(): React.JSX.Element {
   }
 
   useEffect(() => {
+    // Si estamos en la ventana secundaria, no necesitamos escuchar descargas ni updates aquí
+    if (isSecondaryWindow) return
+
     if (typeof window !== 'undefined' && window.api) {
-      // 1. Escuchar progreso de descargas
       window.api.onDownloadProgress((data: any) => {
         setAppState((prevState) => ({
           ...prevState,
@@ -69,7 +82,6 @@ function App(): React.JSX.Element {
         }))
       })
 
-      // 2. ESCUCHAR LOGS DE MINECRAFT
       window.api.onMinecraftLog((log: string) => {
         setLogs(prev => {
           const newLogs = [...prev, log]
@@ -78,7 +90,6 @@ function App(): React.JSX.Element {
         if (log.includes('[ERROR]')) setIsConsoleOpen(true)
       })
 
-      // 3. Eventos del Auto-Updater
       window.api.onUpdateAvailable((version: string) => {
         setUpdateVersion(version)
         setShowUpdateToast(true)
@@ -89,7 +100,7 @@ function App(): React.JSX.Element {
         setShowUpdateToast(true)
       })
     }
-  }, [])
+  }, [isSecondaryWindow])
 
   const handleUpdateAction = () => {
     if (isUpdateReady) {
@@ -111,9 +122,18 @@ function App(): React.JSX.Element {
     }
   }
 
+  // === RENDERIZADO CONDICIONAL PARA VENTANA SECUNDARIA ===
+  if (isSecondaryWindow) {
+    return (
+      <div className="h-screen w-screen bg-zinc-950 text-zinc-200 overflow-hidden">
+        <CreateInstanceWindow />
+      </div>
+    )
+  }
+
+  // === RENDERIZADO NORMAL DEL LAUNCHER ===
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-200 select-none overflow-hidden border border-zinc-800/50 rounded-xl relative">
-      {/* Sidebar con props de consola */}
       <Sidebar 
         activeView={currentView} 
         onNavigate={handleNavigation} 
@@ -125,7 +145,6 @@ function App(): React.JSX.Element {
         <div className="p-8">{renderView()}</div>
       </main>
 
-      {/* CONSOLA DE LOGS */}
       <LogConsole 
         logs={logs} 
         isOpen={isConsoleOpen} 
