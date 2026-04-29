@@ -22,5 +22,5 @@ jobs:
 
       - name: Build and Publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub lo genera solo
-        run: npm run build -- --publish always
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release
