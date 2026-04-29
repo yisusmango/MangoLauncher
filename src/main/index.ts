@@ -40,7 +40,7 @@ interface AppSettings {
   autoUpdate: boolean
 }
 
-// NUEVO: Interfaz de cuenta segura
+// === INTERFACES MULTI-CUENTA ===
 interface UserAccount {
   type: 'microsoft' | 'offline'
   username: string
@@ -50,9 +50,14 @@ interface UserAccount {
   profile?: any
 }
 
+interface AuthData {
+  selectedId: string | null
+  accounts: UserAccount[]
+}
+
 const instancesFile = path.join(app.getPath('userData'), 'instances.json')
 const settingsFile = path.join(app.getPath('userData'), 'settings.json') 
-const authFile = path.join(app.getPath('userData'), 'auth.json') // <-- ARCHIVO DONDE SE GUARDA LA SESIÓN
+const authFile = path.join(app.getPath('userData'), 'auth.json') // <-- ARCHIVO DE SESIONES
 
 const sanitizeFolderName = (name: string) => {
   return name.toLowerCase()
@@ -67,14 +72,36 @@ const defaultSettings: AppSettings = {
   autoUpdate: true
 }
 
-// === GESTOR DE AUTENTICACIÓN ===
-async function getSavedAccount(): Promise<UserAccount | null> {
+// === GESTOR DE AUTENTICACIÓN MULTI-CUENTA ===
+async function getAuthData(): Promise<AuthData> {
   try {
     const data = await fs.readFile(authFile, 'utf-8')
-    return JSON.parse(data)
+    const parsed = JSON.parse(data)
+    
+    // Migración automática: Si el archivo tiene formato viejo de 1 sola cuenta, lo convierte a Multi-Cuenta
+    if (parsed.username && !parsed.accounts) {
+      const migrated: AuthData = { selectedId: parsed.uuid, accounts: [parsed] }
+      await saveAuthData(migrated)
+      return migrated
+    }
+    return parsed
   } catch {
-    return null
+    return { selectedId: null, accounts: [] }
   }
+}
+
+async function saveAuthData(data: AuthData): Promise<void> {
+  try {
+    await fs.mkdir(path.dirname(authFile), { recursive: true })
+    await fs.writeFile(authFile, JSON.stringify(data, null, 2))
+  } catch (error) {
+    console.error("Error guardando auth.json:", error)
+  }
+}
+
+async function getActiveAccount(): Promise<UserAccount | null> {
+  const data = await getAuthData()
+  return data.accounts.find(a => a.uuid === data.selectedId) || null
 }
 
 async function getSettings(): Promise<AppSettings> {
@@ -199,17 +226,21 @@ app.whenReady().then(() => {
   ipcMain.handle('get-settings', async () => await getSettings())
   ipcMain.handle('save-settings', async (_, settings) => await saveSettings(settings))
 
-  // NUEVOS ENDPOINTS DE AUTENTICACIÓN
-  ipcMain.handle('get-account', async () => await getSavedAccount())
+  // === NUEVOS ENDPOINTS DE AUTENTICACIÓN MULTI-CUENTA ===
+  ipcMain.handle('get-auth-data', async () => await getAuthData())
   
   ipcMain.handle('login-offline', async (_, username: string) => {
+    const data = await getAuthData()
+    const uuid = 'offline-' + Date.now() // Permite múltiples cuentas offline únicas
     const account: UserAccount = {
       type: 'offline',
       username: username || 'DevPlayer',
-      uuid: 'offline-uuid',
+      uuid: uuid,
     }
-    await fs.writeFile(authFile, JSON.stringify(account, null, 2))
-    return account
+    data.accounts.push(account)
+    data.selectedId = uuid
+    await saveAuthData(data)
+    return data
   })
 
   ipcMain.handle('login-microsoft', async () => {
@@ -221,26 +252,49 @@ app.whenReady().then(() => {
 
       const account: UserAccount = {
         type: 'microsoft',
-        username: mclcToken.name || 'PremiumPlayer', // <-- SOLUCIÓN: Valor por defecto añadido
-        uuid: mclcToken.uuid || 'unknown-uuid',      // <-- Prevenimos el mismo error para el UUID
+        username: mclcToken.name || 'PremiumPlayer', 
+        uuid: mclcToken.uuid || 'unknown-uuid',      
         access_token: mclcToken.access_token,
         client_token: mclcToken.client_token || 'client_token',
         profile: mclcToken
       }
       
-      await fs.writeFile(authFile, JSON.stringify(account, null, 2))
-      return account
+      const data = await getAuthData()
+      const existingIndex = data.accounts.findIndex(a => a.uuid === account.uuid)
+      
+      if (existingIndex >= 0) {
+        data.accounts[existingIndex] = account // Actualiza token si la cuenta ya existía
+      } else {
+        data.accounts.push(account) // Añade nueva cuenta
+      }
+      data.selectedId = account.uuid
+      
+      await saveAuthData(data)
+      return data
     } catch (err) {
       console.error("Error en login Microsoft:", err)
       return null
     }
   })
 
-  ipcMain.handle('logout', async () => {
-    try {
-      await fs.unlink(authFile)
-      return true
-    } catch { return false }
+  ipcMain.handle('switch-account', async (_, uuid: string) => {
+    const data = await getAuthData()
+    if (data.accounts.some(a => a.uuid === uuid)) {
+      data.selectedId = uuid
+      await saveAuthData(data)
+    }
+    return data
+  })
+
+  ipcMain.handle('remove-account', async (_, uuid: string) => {
+    const data = await getAuthData()
+    data.accounts = data.accounts.filter(a => a.uuid !== uuid)
+    // Si borramos la cuenta activa, seleccionamos otra (o null si no quedan)
+    if (data.selectedId === uuid) {
+      data.selectedId = data.accounts.length > 0 ? data.accounts[0].uuid : null
+    }
+    await saveAuthData(data)
+    return data
   })
 
   ipcMain.handle('get-instances', async () => {
@@ -279,7 +333,7 @@ app.whenReady().then(() => {
     try {
       const launcher = new Client()
       const currentSettings = await getSettings() 
-      const account = await getSavedAccount() // <-- LEEMOS LA CUENTA ACTIVA
+      const account = await getActiveAccount() // <-- LEEMOS LA CUENTA ACTIVA DE LA LISTA
 
       const downloadTracker: DownloadTracker = {
         lastBytesDownloaded: 0,

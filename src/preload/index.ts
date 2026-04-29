@@ -29,7 +29,7 @@ interface AppSettings {
   autoUpdate: boolean
 }
 
-// Interfaz para la cuenta de usuario
+// NUEVO: Interfaces de Auth actualizadas para soportar listas
 interface UserAccount {
   type: 'microsoft' | 'offline'
   username: string
@@ -39,7 +39,11 @@ interface UserAccount {
   profile?: any
 }
 
-// Custom APIs for renderer
+interface AuthData {
+  selectedId: string | null
+  accounts: UserAccount[]
+}
+
 const api = {
   launchInstance: (instance: MinecraftInstance): void => {
     ipcRenderer.send('launch-instance', instance)
@@ -67,18 +71,22 @@ const api = {
   saveSettings: async (settings: AppSettings): Promise<boolean> => {
     return await ipcRenderer.invoke('save-settings', settings)
   },
-  // NUEVO: Funciones para manejar la autenticación
-  loginMicrosoft: async (): Promise<UserAccount | null> => {
+  
+  // NUEVO: Controladores del Gestor Multi-Cuenta
+  loginMicrosoft: async (): Promise<AuthData | null> => {
     return await ipcRenderer.invoke('login-microsoft')
   },
-  loginOffline: async (username: string): Promise<UserAccount> => {
+  loginOffline: async (username: string): Promise<AuthData> => {
     return await ipcRenderer.invoke('login-offline', username)
   },
-  logout: async (): Promise<boolean> => {
-    return await ipcRenderer.invoke('logout')
+  getAuthData: async (): Promise<AuthData> => {
+    return await ipcRenderer.invoke('get-auth-data')
   },
-  getAccount: async (): Promise<UserAccount | null> => {
-    return await ipcRenderer.invoke('get-account')
+  switchAccount: async (uuid: string): Promise<AuthData> => {
+    return await ipcRenderer.invoke('switch-account', uuid)
+  },
+  removeAccount: async (uuid: string): Promise<AuthData> => {
+    return await ipcRenderer.invoke('remove-account', uuid)
   }
 }
 
@@ -90,8 +98,8 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
-  // @ts-ignore (define in dts)
+  // @ts-ignore
   window.electron = electronAPI
-  // @ts-ignore (define in dts)
+  // @ts-ignore
   window.api = api
 }

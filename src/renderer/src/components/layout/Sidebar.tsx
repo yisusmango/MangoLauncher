@@ -12,66 +12,57 @@ interface SidebarProps {
   onNavigate: (route: string) => void
 }
 
-// Nueva interfaz para la cuenta que lee desde Node.js
 interface UserAccount {
   type: 'microsoft' | 'offline'
   username: string
   uuid: string
 }
 
+interface AuthData {
+  selectedId: string | null
+  accounts: UserAccount[]
+}
+
 const sidebarItems: SidebarItem[] = [
-  {
-    id: 'instances',
-    label: 'Instancias',
-    icon: '📦',
-    tooltip: 'Manage game instances'
-  },
-  {
-    id: 'discover',
-    label: 'Descubrir',
-    icon: '🔍',
-    tooltip: 'Discover mods and content'
-  },
-  {
-    id: 'settings',
-    label: 'Ajustes',
-    icon: '⚙️',
-    tooltip: 'Application settings'
-  }
+  { id: 'instances', label: 'Instancias', icon: '📦', tooltip: 'Manage game instances' },
+  { id: 'discover', label: 'Descubrir', icon: '🔍', tooltip: 'Discover mods and content' },
+  { id: 'settings', label: 'Ajustes', icon: '⚙️', tooltip: 'Application settings' }
 ]
 
 function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
-  // Estados para controlar el Login
-  const [account, setAccount] = useState<UserAccount | null>(null)
+  const [authData, setAuthData] = useState<AuthData>({ selectedId: null, accounts: [] })
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
   const [offlineName, setOfflineName] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
 
-  // Cargar la sesión apenas se abre el launcher
+  const activeAccount = authData.accounts.find(a => a.uuid === authData.selectedId)
+
   useEffect(() => {
-    const fetchAccount = async () => {
+    const fetchAuth = async () => {
       // @ts-ignore
-      const currentAccount = await window.api.getAccount()
-      if (currentAccount) setAccount(currentAccount)
+      const data = await window.api.getAuthData()
+      if (data) setAuthData(data)
     }
-    fetchAccount()
+    fetchAuth()
   }, [])
 
-  const handleItemClick = (itemId: string): void => {
-    onNavigate(itemId)
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setShowAddForm(false)
+    setOfflineName('')
   }
 
-  // Funciones de conexión con el Backend
   const handleMicrosoftLogin = async () => {
     setIsLoggingIn(true)
     try {
       // @ts-ignore
-      const newAccount = await window.api.loginMicrosoft()
-      if (newAccount) {
-        setAccount(newAccount)
-        setIsModalOpen(false)
+      const newData = await window.api.loginMicrosoft()
+      if (newData) {
+        setAuthData(newData)
+        setShowAddForm(false)
       } else {
-        alert('Fallo al iniciar sesión con Microsoft. Cierra la ventana y vuelve a intentarlo.')
+        alert('Fallo al iniciar sesión. Inténtalo de nuevo.')
       }
     } catch (error) {
       console.error(error)
@@ -87,9 +78,9 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
     setIsLoggingIn(true)
     try {
       // @ts-ignore
-      const newAccount = await window.api.loginOffline(offlineName)
-      setAccount(newAccount)
-      setIsModalOpen(false)
+      const newData = await window.api.loginOffline(offlineName)
+      setAuthData(newData)
+      setShowAddForm(false)
       setOfflineName('')
     } catch (error) {
       console.error(error)
@@ -98,22 +89,30 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
     }
   }
 
-  const handleLogout = async () => {
+  const handleSwitchAccount = async (uuid: string) => {
     // @ts-ignore
-    const success = await window.api.logout()
-    if (success) {
-      setAccount(null)
-      setIsModalOpen(false)
-    }
+    const newData = await window.api.switchAccount(uuid)
+    setAuthData(newData)
+  }
+
+  const handleRemoveAccount = async (uuid: string) => {
+    // @ts-ignore
+    const newData = await window.api.removeAccount(uuid)
+    setAuthData(newData)
+    if (newData.accounts.length === 0) setShowAddForm(true)
+  }
+
+  // Función para obtener la URL de la cara de forma segura
+  const getAvatarUrl = (account: UserAccount, size: number) => {
+    const identifier = account.type === 'microsoft' ? account.uuid : account.username
+    return `https://mc-heads.net/avatar/${identifier}/${size}`
   }
 
   return (
     <aside className="w-16 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-4 gap-2 z-40 relative">
-      {/* Logo/Home Button */}
       <button
-        onClick={() => handleItemClick('instances')}
+        onClick={() => onNavigate('instances')}
         className="w-12 h-12 rounded-lg bg-indigo-500 hover:bg-indigo-600 transition-colors duration-200 flex items-center justify-center text-white font-bold text-lg mb-2 group relative"
-        title="Home"
       >
         M
         <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
@@ -123,17 +122,15 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
 
       <div className="w-8 h-px bg-zinc-800 my-2"></div>
 
-      {/* Navigation Items */}
       {sidebarItems.map((item) => (
         <button
           key={item.id}
-          onClick={() => handleItemClick(item.id)}
+          onClick={() => onNavigate(item.id)}
           className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
             activeView === item.id
               ? 'bg-indigo-500 text-white'
               : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50'
           }`}
-          title={item.tooltip}
         >
           <span className="text-xl">{item.icon}</span>
           <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
@@ -142,90 +139,118 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
         </button>
       ))}
 
-      {/* Spacer */}
       <div className="flex-1"></div>
-
       <div className="w-8 h-px bg-zinc-800 my-2"></div>
 
-      {/* WIDGET DE PERFIL (Sustituye al botón de ayuda) */}
+      {/* WIDGET DE AVATAR */}
       <button
         onClick={() => setIsModalOpen(true)}
         className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
-          account 
-            ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' 
+          activeAccount 
+            ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-zinc-900' 
             : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50'
         }`}
       >
-        <span className="text-xl">{account ? '👤' : '🔒'}</span>
+        {activeAccount ? (
+          <img 
+            src={getAvatarUrl(activeAccount, 48)} 
+            alt={activeAccount.username}
+            className="w-full h-full rounded-lg object-cover bg-zinc-800"
+            onError={(e) => {
+              // Si falla por alguna razón de red, ponemos un color base para que no se vea roto
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="%2327272a"/></svg>'
+            }}
+          />
+        ) : (
+          <span className="text-xl">🔒</span>
+        )}
         <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-          {account ? account.username : 'Iniciar Sesión'}
+          {activeAccount ? activeAccount.username : 'Iniciar Sesión'}
         </span>
       </button>
 
-      {/* MODAL DE AUTENTICACIÓN */}
+      {/* MODAL DE AUTENTICACIÓN MULTI-CUENTA */}
       {isModalOpen && (
-        <div 
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-          onClick={() => setIsModalOpen(false)} // Cierra al hacer clic fuera
-        >
-          <div 
-            className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-full max-w-sm shadow-2xl"
-            onClick={(e) => e.stopPropagation()} // Evita que se cierre al hacer clic dentro
-          >
-            {account ? (
-              /* --- VISTA: USUARIO CONECTADO --- */
-              <div className="text-center">
-                <div className="w-20 h-20 bg-zinc-800 rounded-full mx-auto flex items-center justify-center text-4xl mb-4 border-2 border-emerald-500">
-                  👤
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={handleCloseModal}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            {authData.accounts.length > 0 && !showAddForm ? (
+              /* VISTA: LISTA DE CUENTAS */
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-zinc-50">Tus Cuentas</h3>
                 </div>
-                <h3 className="text-xl font-bold text-zinc-50 mb-1">{account.username}</h3>
-                <p className="text-sm text-zinc-400 mb-6">
-                  Cuenta: <span className="text-indigo-400">{account.type === 'microsoft' ? 'Premium (Microsoft)' : 'Offline'}</span>
-                </p>
-                <button
-                  onClick={handleLogout}
-                  className="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 font-medium rounded transition-colors"
-                >
-                  Cerrar Sesión
+                
+                <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-1">
+                  {authData.accounts.map((acc) => (
+                    <div 
+                      key={acc.uuid} 
+                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                        acc.uuid === authData.selectedId 
+                          ? 'border-emerald-500 bg-emerald-500/10' 
+                          : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <img 
+                          src={getAvatarUrl(acc, 40)} 
+                          className="w-10 h-10 rounded bg-zinc-900" 
+                          alt="avatar"
+                        />
+                        <div>
+                          <p className="font-bold text-zinc-50 leading-tight">{acc.username}</p>
+                          <p className="text-[10px] text-zinc-400 uppercase tracking-wider">{acc.type}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {acc.uuid !== authData.selectedId && (
+                          <button onClick={() => handleSwitchAccount(acc.uuid)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-50 rounded text-xs font-medium transition-colors">
+                            Usar
+                          </button>
+                        )}
+                        <button onClick={() => handleRemoveAccount(acc.uuid)} className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded text-xs transition-colors" title="Eliminar">
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={() => setShowAddForm(true)} className="w-full py-2.5 border-2 border-dashed border-zinc-700 hover:border-indigo-500 text-zinc-400 hover:text-indigo-400 rounded-lg font-medium transition-colors text-sm">
+                  + Añadir otra cuenta
                 </button>
               </div>
             ) : (
-              /* --- VISTA: INICIAR SESIÓN --- */
+              /* VISTA: AÑADIR NUEVA CUENTA */
               <div>
-                <h3 className="text-2xl font-bold text-zinc-50 mb-6 text-center">Identifícate</h3>
+                <div className="flex items-center mb-6">
+                  {authData.accounts.length > 0 && (
+                    <button onClick={() => setShowAddForm(false)} className="text-zinc-400 hover:text-zinc-50 mr-3">←</button>
+                  )}
+                  <h3 className="text-xl font-bold text-zinc-50">Añadir Cuenta</h3>
+                </div>
 
-                {/* Botón Microsoft */}
-                <button
-                  onClick={handleMicrosoftLogin}
-                  disabled={isLoggingIn}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00a4ef] hover:bg-[#008bc8] text-white font-medium rounded transition-colors mb-6 disabled:opacity-50"
-                >
+                <button onClick={handleMicrosoftLogin} disabled={isLoggingIn} className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00a4ef] hover:bg-[#008bc8] text-white font-medium rounded transition-colors mb-6 disabled:opacity-50">
                   <span className="text-xl">🎮</span>
                   {isLoggingIn ? 'Abriendo Xbox...' : 'Login con Microsoft'}
                 </button>
 
                 <div className="relative flex items-center py-2 mb-6">
                   <div className="flex-grow border-t border-zinc-800"></div>
-                  <span className="flex-shrink-0 mx-4 text-zinc-500 text-sm">O juega sin conexión</span>
+                  <span className="flex-shrink-0 mx-4 text-zinc-500 text-xs uppercase tracking-wider">O juega offline</span>
                   <div className="flex-grow border-t border-zinc-800"></div>
                 </div>
 
-                {/* Formulario Offline */}
                 <form onSubmit={handleOfflineLogin}>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">Nombre de Usuario</label>
                   <input
                     type="text"
                     value={offlineName}
                     onChange={(e) => setOfflineName(e.target.value)}
-                    placeholder="Ej: yisusmango"
+                    placeholder="Nombre de Usuario (Offline)"
                     disabled={isLoggingIn}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors mb-4"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors mb-4"
                   />
-                  <button
-                    type="submit"
-                    disabled={isLoggingIn || !offlineName.trim()}
-                    className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-600 border border-zinc-700 text-zinc-50 font-medium rounded transition-colors"
-                  >
+                  <button type="submit" disabled={isLoggingIn || !offlineName.trim()} className="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 border border-zinc-700 text-zinc-50 text-sm font-medium rounded transition-colors">
                     Entrar Offline
                   </button>
                 </form>
@@ -234,7 +259,6 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
           </div>
         </div>
       )}
-
     </aside>
   )
 }
