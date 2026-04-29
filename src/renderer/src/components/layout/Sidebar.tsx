@@ -24,9 +24,9 @@ interface AuthData {
 }
 
 const sidebarItems: SidebarItem[] = [
-  { id: 'instances', label: 'Instancias', icon: '📦', tooltip: 'Manage game instances' },
-  { id: 'discover', label: 'Descubrir', icon: '🔍', tooltip: 'Discover mods and content' },
-  { id: 'settings', label: 'Ajustes', icon: '⚙️', tooltip: 'Application settings' }
+  { id: 'instances', label: 'Instancias', icon: '📦', tooltip: 'Gestionar instancias de juego' },
+  { id: 'discover', label: 'Descubrir', icon: '🔍', tooltip: 'Explorar mods y contenido' },
+  { id: 'settings', label: 'Ajustes', icon: '⚙️', tooltip: 'Ajustes de la aplicación' }
 ]
 
 function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
@@ -102,7 +102,6 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
     if (newData.accounts.length === 0) setShowAddForm(true)
   }
 
-  // Función para obtener la URL de la cara de forma segura
   const getAvatarUrl = (account: UserAccount, size: number) => {
     const identifier = account.type === 'microsoft' ? account.uuid : account.username
     return `https://mc-heads.net/avatar/${identifier}/${size}`
@@ -110,13 +109,18 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
 
   return (
     <aside className="w-16 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-4 gap-2 z-40 relative">
+      {/* BOTÓN DE CHANGELOG (Antes era Home redundante) */}
       <button
-        onClick={() => onNavigate('instances')}
-        className="w-12 h-12 rounded-lg bg-indigo-500 hover:bg-indigo-600 transition-colors duration-200 flex items-center justify-center text-white font-bold text-lg mb-2 group relative"
+        onClick={() => onNavigate('updates')}
+        className={`w-12 h-12 rounded-lg transition-all duration-200 flex items-center justify-center font-bold text-lg mb-2 group relative ${
+          activeView === 'updates'
+            ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+            : 'bg-zinc-800 text-indigo-400 hover:bg-zinc-700'
+        }`}
       >
-        M
-        <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          Mango Launcher
+        🥭
+        <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+          Notas de Versión
         </span>
       </button>
 
@@ -128,12 +132,12 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
           onClick={() => onNavigate(item.id)}
           className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
             activeView === item.id
-              ? 'bg-indigo-500 text-white'
+              ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
               : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50'
           }`}
         >
           <span className="text-xl">{item.icon}</span>
-          <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+          <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
             {item.label}
           </span>
         </button>
@@ -157,7 +161,6 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
             alt={activeAccount.username}
             className="w-full h-full rounded-lg object-cover bg-zinc-800"
             onError={(e) => {
-              // Si falla por alguna razón de red, ponemos un color base para que no se vea roto
               (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="%2327272a"/></svg>'
             }}
           />
@@ -169,18 +172,15 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
         </span>
       </button>
 
-      {/* MODAL DE AUTENTICACIÓN MULTI-CUENTA */}
+      {/* MODAL DE AUTENTICACIÓN (Sin cambios) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={handleCloseModal}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            
             {authData.accounts.length > 0 && !showAddForm ? (
-              /* VISTA: LISTA DE CUENTAS */
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-bold text-zinc-50">Tus Cuentas</h3>
                 </div>
-                
                 <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-1">
                   {authData.accounts.map((acc) => (
                     <div 
@@ -192,11 +192,7 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <img 
-                          src={getAvatarUrl(acc, 40)} 
-                          className="w-10 h-10 rounded bg-zinc-900" 
-                          alt="avatar"
-                        />
+                        <img src={getAvatarUrl(acc, 40)} className="w-10 h-10 rounded bg-zinc-900" alt="avatar" />
                         <div>
                           <p className="font-bold text-zinc-50 leading-tight">{acc.username}</p>
                           <p className="text-[10px] text-zinc-400 uppercase tracking-wider">{acc.type}</p>
@@ -204,24 +200,16 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
                       </div>
                       <div className="flex gap-2">
                         {acc.uuid !== authData.selectedId && (
-                          <button onClick={() => handleSwitchAccount(acc.uuid)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-50 rounded text-xs font-medium transition-colors">
-                            Usar
-                          </button>
+                          <button onClick={() => handleSwitchAccount(acc.uuid)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-50 rounded text-xs font-medium transition-colors">Usar</button>
                         )}
-                        <button onClick={() => handleRemoveAccount(acc.uuid)} className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded text-xs transition-colors" title="Eliminar">
-                          ✕
-                        </button>
+                        <button onClick={() => handleRemoveAccount(acc.uuid)} className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded text-xs transition-colors">✕</button>
                       </div>
                     </div>
                   ))}
                 </div>
-
-                <button onClick={() => setShowAddForm(true)} className="w-full py-2.5 border-2 border-dashed border-zinc-700 hover:border-indigo-500 text-zinc-400 hover:text-indigo-400 rounded-lg font-medium transition-colors text-sm">
-                  + Añadir otra cuenta
-                </button>
+                <button onClick={() => setShowAddForm(true)} className="w-full py-2.5 border-2 border-dashed border-zinc-700 hover:border-indigo-500 text-zinc-400 hover:text-indigo-400 rounded-lg font-medium transition-colors text-sm">+ Añadir otra cuenta</button>
               </div>
             ) : (
-              /* VISTA: AÑADIR NUEVA CUENTA */
               <div>
                 <div className="flex items-center mb-6">
                   {authData.accounts.length > 0 && (
@@ -229,18 +217,15 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
                   )}
                   <h3 className="text-xl font-bold text-zinc-50">Añadir Cuenta</h3>
                 </div>
-
                 <button onClick={handleMicrosoftLogin} disabled={isLoggingIn} className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00a4ef] hover:bg-[#008bc8] text-white font-medium rounded transition-colors mb-6 disabled:opacity-50">
                   <span className="text-xl">🎮</span>
                   {isLoggingIn ? 'Abriendo Xbox...' : 'Login con Microsoft'}
                 </button>
-
                 <div className="relative flex items-center py-2 mb-6">
                   <div className="flex-grow border-t border-zinc-800"></div>
                   <span className="flex-shrink-0 mx-4 text-zinc-500 text-xs uppercase tracking-wider">O juega offline</span>
                   <div className="flex-grow border-t border-zinc-800"></div>
                 </div>
-
                 <form onSubmit={handleOfflineLogin}>
                   <input
                     type="text"
@@ -250,9 +235,7 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
                     disabled={isLoggingIn}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors mb-4"
                   />
-                  <button type="submit" disabled={isLoggingIn || !offlineName.trim()} className="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 border border-zinc-700 text-zinc-50 text-sm font-medium rounded transition-colors">
-                    Entrar Offline
-                  </button>
+                  <button type="submit" disabled={isLoggingIn || !offlineName.trim()} className="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-50 text-sm font-medium rounded transition-colors">Entrar Offline</button>
                 </form>
               </div>
             )}
