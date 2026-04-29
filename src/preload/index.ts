@@ -32,7 +32,7 @@ interface AppSettings {
 }
 
 interface UserAccount {
-  type: 'microsoft' | 'offline'
+  type: 'microsoft' | 'offline' | 'premium'
   username: string
   uuid: string
   access_token?: string
@@ -43,6 +43,14 @@ interface UserAccount {
 interface AuthData {
   selectedId: string | null
   accounts: UserAccount[]
+}
+
+// Nueva interfaz para las capturas de pantalla
+interface ScreenshotData {
+  name: string
+  path: string
+  url: string
+  date: number
 }
 
 const api = {
@@ -113,9 +121,20 @@ const api = {
     })
   },
 
-  // === NUEVO: Controlador de Discord RPC ===
+  // === Controlador de Discord RPC ===
   updateDiscordStatus: (details: string, state: string): void => {
     ipcRenderer.send('update-discord-rpc', { details, state })
+  },
+
+  // === NUEVO: Gestor de Capturas (Screenshots) ===
+  getScreenshots: async (instanceId: string): Promise<ScreenshotData[]> => {
+    return await ipcRenderer.invoke('get-screenshots', instanceId)
+  },
+  deleteScreenshot: async (instanceId: string, fileName: string): Promise<boolean> => {
+    return await ipcRenderer.invoke('delete-screenshot', instanceId, fileName)
+  },
+  openScreenshotFolder: (instanceId: string): void => {
+    ipcRenderer.send('open-screenshots-folder', instanceId)
   }
 }
 

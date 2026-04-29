@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.0.8',
+    date: '28 de Abril, 2026',
+    title: 'Galería de Capturas y Motor de Imágenes',
+    type: 'minor',
+    changes: [
+      'Implementación del Screenshots Manager: visualiza tus capturas de Minecraft directamente desde el launcher.',
+      'Nuevo protocolo nativo "mango-file": carga optimizada de imágenes locales sin restricciones de seguridad de Chromium.',
+      'Sistema de reparación de rutas en Windows para asegurar la carga correcta de archivos desde AppData.',
+      'Gestión de archivos: botones dedicados para borrar capturas y abrir la carpeta de screenshots en el explorador.',
+      'Mejora en Discord RPC: estado dinámico "Viendo sus Capturas" al navegar por la galería.'
+    ]
+  },  
+  {
     version: 'v1.0.7',
     date: '28 de Abril, 2026',
     title: 'Discord Rich Presence: Conectando a los Panas',

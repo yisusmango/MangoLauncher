@@ -31,7 +31,7 @@ interface AppSettings {
 }
 
 interface UserAccount {
-  type: 'microsoft' | 'offline'
+  type: 'microsoft' | 'offline' | 'premium'
   username: string
   uuid: string
   access_token?: string
@@ -42,6 +42,14 @@ interface UserAccount {
 interface AuthData {
   selectedId: string | null
   accounts: UserAccount[]
+}
+
+// Nueva interfaz para las capturas
+interface ScreenshotData {
+  name: string
+  path: string
+  url: string
+  date: number
 }
 
 declare global {
@@ -71,8 +79,13 @@ declare global {
       // === Controlador de Logs de Minecraft ===
       onMinecraftLog: (callback: (log: string) => void) => void
 
-      // === NUEVO: Controlador de Discord RPC ===
+      // === Controlador de Discord RPC ===
       updateDiscordStatus: (details: string, state: string) => void
+
+      // === NUEVO: Gestor de Capturas (Screenshots) ===
+      getScreenshots: (instanceId: string) => Promise<ScreenshotData[]>
+      deleteScreenshot: (instanceId: string, fileName: string) => Promise<boolean>
+      openScreenshotFolder: (instanceId: string) => void
     }
   }
 }

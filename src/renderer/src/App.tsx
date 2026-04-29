@@ -4,10 +4,11 @@ import InstancesView from './components/views/InstancesView'
 import DiscoverView from './components/views/DiscoverView'
 import SettingsView from './components/views/SettingsView'
 import UpdatesView from './components/views/UpdatesView'
+import GalleryView from './components/views/GalleryView'
 import UpdateToast from './components/layout/UpdateToast'
 import LogConsole from './components/layout/LogConsole'
 
-type ViewType = 'instances' | 'discover' | 'settings' | 'updates'
+type ViewType = 'instances' | 'discover' | 'settings' | 'updates' | 'gallery'
 
 interface AppState {
   downloadProgress: number
@@ -36,7 +37,7 @@ function App(): React.JSX.Element {
 
   // === NAVEGACIÓN Y DISCORD RPC ===
   const handleNavigation = (route: string): void => {
-    if (route === 'instances' || route === 'discover' || route === 'settings' || route === 'updates') {
+    if (route === 'instances' || route === 'discover' || route === 'settings' || route === 'updates' || route === 'gallery') {
       setCurrentView(route as ViewType)
       
       // Mapeo de estados para Discord
@@ -44,7 +45,8 @@ function App(): React.JSX.Element {
         instances: 'Gestionando Instancias',
         discover: 'Explorando Contenido',
         settings: 'Configurando el Motor',
-        updates: 'Viendo Notas de Versión'
+        updates: 'Viendo Notas de Versión',
+        gallery: 'Viendo sus Capturas'
       }
       
       // Enviar la actualización a Discord si la API está disponible
@@ -104,6 +106,7 @@ function App(): React.JSX.Element {
       case 'discover': return <DiscoverView />
       case 'settings': return <SettingsView />
       case 'updates': return <UpdatesView />
+      case 'gallery': return <GalleryView />
       default: return <InstancesView />
     }
   }
