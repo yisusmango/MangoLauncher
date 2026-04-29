@@ -15,9 +15,12 @@ interface SidebarProps {
 }
 
 interface UserAccount {
-  type: 'microsoft' | 'offline'
+  type: 'microsoft' | 'offline' | 'premium' // <-- Agrega 'premium' aquí
   username: string
   uuid: string
+  access_token?: string
+  client_token?: string
+  profile?: any
 }
 
 interface AuthData {
@@ -28,6 +31,7 @@ interface AuthData {
 const sidebarItems: SidebarItem[] = [
   { id: 'instances', label: 'Instancias', icon: '📦', tooltip: 'Gestionar instancias de juego' },
   { id: 'discover', label: 'Descubrir', icon: '🔍', tooltip: 'Explorar mods y contenido' },
+  { id: 'gallery', label: 'Galería', icon: '📸', tooltip: 'Ver capturas de pantalla' },
   { id: 'settings', label: 'Ajustes', icon: '⚙️', tooltip: 'Ajustes de la aplicación' }
 ]
 

@@ -1,12 +1,32 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
 import { join } from 'path'
 import path from 'path'
 import { promises as fs } from 'fs'
+import * as fsSync from 'fs' // Para operaciones síncronas como existsSync
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import { Readable } from 'stream'
+import { finished } from 'stream/promises'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Client, Authenticator } from 'minecraft-launcher-core'
 import * as msmc from 'msmc'
 import { autoUpdater } from 'electron-updater'
-import DiscordRPC from 'discord-rpc' // <-- NUEVO: Importamos Discord RPC
+import DiscordRPC from 'discord-rpc'
+
+const execAsync = promisify(exec)
+
+// --- REGISTRAR ESQUEMA PRIVILEGIADO PARA PROTOCOLO CUSTOM ---
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'mango-file',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true
+    }
+  }
+])
 
 // --- CONFIGURACIÓN DE ACTUALIZACIONES ---
 autoUpdater.autoDownload = false
@@ -37,7 +57,6 @@ function checkUpdates(mainWindow: BrowserWindow): void {
 }
 
 // --- CONFIGURACIÓN DE DISCORD RPC ---
-// Reemplaza los números por el Application ID de tu bot en el Discord Developer Portal
 const clientId = '1498877731927101450' 
 DiscordRPC.register(clientId)
 
@@ -53,8 +72,8 @@ async function setDiscordActivity(details: string, state: string, resetTime: boo
       details: details,
       state: state,
       startTimestamp: rpcStartTimestamp,
-      largeImageKey: 'mango_logo', // <-- Sube tu icono a Discord con este nombre exacto
-      largeImageText: 'Mango Launcher v1.0.6',
+      largeImageKey: 'mango_logo', 
+      largeImageText: 'Mango Launcher v1.0.7',
       instance: false,
     })
   } catch (err) {
@@ -131,6 +150,116 @@ const defaultSettings: AppSettings = {
   theme: 'dark',
   autoUpdate: true
 }
+
+// --- NUEVO: SISTEMA INTELIGENTE DE JAVA ---
+
+async function getJavaMajorVersion(mcVersion: string): Promise<number> {
+  // Extrae la versión menor (ej: 1.8.9 -> 8, 1.16.5 -> 16, 1.21.11 -> 21)
+  const parts = mcVersion.split('.')
+  const minor = parseInt(parts[1]) || 0
+  const patch = parseInt(parts[2]) || 0
+  
+  if (minor <= 16) return 8 // Versiones viejas ocupan Java 8
+  if (minor >= 21 || (minor === 20 && patch >= 5)) return 21 // Nuevas versiones ocupan Java 21
+  return 17 // Versiones intermedias (1.17 - 1.20.4) ocupan Java 17
+}
+
+async function ensureJava(mcVersion: string, event: Electron.IpcMainEvent): Promise<string | undefined> {
+  const javaMajor = await getJavaMajorVersion(mcVersion)
+  const javaDir = path.join(app.getPath('userData'), 'java', javaMajor.toString())
+  const isWin = process.platform === 'win32'
+  const javaExeName = isWin ? 'java.exe' : 'java'
+
+  // Función para buscar recursivamente el ejecutable de java
+  async function findJavaExe(dir: string): Promise<string | null> {
+    if (!fsSync.existsSync(dir)) return null;
+    const entries = await fs.readdir(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        const found = await findJavaExe(fullPath)
+        if (found) return found
+      } else if (entry.name === javaExeName && path.basename(path.dirname(fullPath)) === 'bin') {
+        return fullPath
+      }
+    }
+    return null
+  }
+
+  // 1. Revisar si ya lo tenemos descargado
+  const existingJava = await findJavaExe(javaDir)
+  if (existingJava) {
+    console.log(`[Java Setup] Java ${javaMajor} ya está listo en: ${existingJava}`)
+    return existingJava
+  }
+
+  // 2. Si no existe, lo descargamos
+  event.sender.send('download-progress', {
+    percentage: 0, speed: 'Iniciando...', phase: `Descargando Java ${javaMajor} (Requerido)...`, isDownloading: true
+  })
+
+  const os = isWin ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux'
+  const arch = process.arch === 'x64' ? 'x64' : process.arch === 'arm64' ? 'aarch64' : 'x86'
+  const apiUrl = `https://api.adoptium.net/v3/binary/latest/${javaMajor}/ga/${os}/${arch}/jre/hotspot/normal/eclipse?project=jdk`
+  
+  try {
+    console.log(`[Java Setup] Descargando desde: ${apiUrl}`)
+    const res = await fetch(apiUrl, { redirect: 'follow' })
+    if (!res.ok) throw new Error(`Error HTTP: ${res.status}`)
+    
+    await fs.mkdir(javaDir, { recursive: true })
+    const extension = isWin ? '.zip' : '.tar.gz'
+    const tempFile = path.join(javaDir, `java_download${extension}`)
+    
+    const totalBytes = Number(res.headers.get('content-length')) || 0
+    let downloadedBytes = 0
+    
+    const body = Readable.fromWeb(res.body as any)
+    const dest = fsSync.createWriteStream(tempFile)
+
+    let lastUpdate = Date.now()
+    
+    body.on('data', (chunk) => {
+      downloadedBytes += chunk.length
+      const now = Date.now()
+      if (now - lastUpdate > 500 && totalBytes > 0) {
+        const percentage = Math.round((downloadedBytes / totalBytes) * 100)
+        event.sender.send('download-progress', {
+          percentage, speed: '', phase: `Descargando Java ${javaMajor}...`, isDownloading: true
+        })
+        lastUpdate = now
+      }
+    })
+
+    body.pipe(dest)
+    await finished(dest)
+
+    // 3. Extraer el archivo
+    event.sender.send('download-progress', {
+      percentage: 100, speed: '', phase: `Instalando Java ${javaMajor}...`, isDownloading: true
+    })
+    console.log(`[Java Setup] Extrayendo archivo: ${tempFile}`)
+    
+    // Usamos el comando nativo del sistema para extraer
+    await execAsync(`tar -xf "${tempFile}" -C "${javaDir}"`)
+    
+    // Limpiar archivo temporal zip/tar
+    await fs.unlink(tempFile)
+
+    // 4. Buscar el ejecutable recién extraído
+    const extractedJava = await findJavaExe(javaDir)
+    if (!extractedJava) throw new Error("No se encontró java.exe tras la extracción")
+
+    console.log(`[Java Setup] Java ${javaMajor} instalado correctamente.`)
+    return extractedJava
+
+  } catch (err) {
+    console.error('[Java Setup] Falló la descarga de Java. Usando el del sistema por defecto.', err)
+    return undefined 
+  }
+}
+
+// ------------------------------------
 
 async function getAuthData(): Promise<AuthData> {
   try {
@@ -241,6 +370,84 @@ async function setupFabric(instancePath: string, mcVersion: string): Promise<str
   }
 }
 
+// --- GESTOR DE CAPTURAS (SCREENSHOTS) ---
+
+interface ScreenshotData {
+  name: string
+  path: string
+  url: string
+  date: number
+}
+
+async function getScreenshots(instanceId: string): Promise<ScreenshotData[]> {
+  try {
+    const screenshotsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots')
+    
+    // Verificar si la carpeta existe
+    if (!fsSync.existsSync(screenshotsPath)) {
+      return []
+    }
+
+    // Leer archivos de la carpeta
+    const files = await fs.readdir(screenshotsPath)
+    
+    // Filtrar solo archivos .png y obtener información
+    const screenshots: ScreenshotData[] = []
+    
+    for (const file of files) {
+      if (!file.endsWith('.png')) continue
+      
+      const filePath = path.join(screenshotsPath, file)
+      const stat = await fs.stat(filePath)
+      
+      // Crear URL con protocolo mango-file (tres barras para forma estándar de protocolo)
+      const fileUrl = 'mango-file:///' + filePath
+      
+      screenshots.push({
+        name: file,
+        path: filePath,
+        url: fileUrl,
+        date: stat.mtime.getTime()
+      })
+    }
+    
+    // Ordenar por fecha descendente (más recientes primero)
+    screenshots.sort((a, b) => b.date - a.date)
+    
+    return screenshots
+  } catch (err) {
+    console.error('[Screenshots] Error al leer capturas:', err)
+    return []
+  }
+}
+
+async function deleteScreenshot(instanceId: string, fileName: string): Promise<boolean> {
+  try {
+    const screenshotsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots')
+    const filePath = path.join(screenshotsPath, fileName)
+    
+    // Validar que la ruta esté dentro de la carpeta de screenshots
+    if (!filePath.startsWith(screenshotsPath)) {
+      console.error('[Screenshots] Intento de acceso no autorizado:', filePath)
+      return false
+    }
+    
+    // Verificar que el archivo existe
+    if (!fsSync.existsSync(filePath)) {
+      console.error('[Screenshots] Archivo no encontrado:', filePath)
+      return false
+    }
+    
+    // Eliminar el archivo
+    await fs.unlink(filePath)
+    console.log('[Screenshots] Captura eliminada:', fileName)
+    return true
+  } catch (err) {
+    console.error('[Screenshots] Error al eliminar captura:', err)
+    return false
+  }
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 900,
@@ -250,7 +457,9 @@ function createWindow(): void {
     icon: path.join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webSecurity: false,
+      allowRunningInsecureContent: true
     }
   })
 
@@ -274,11 +483,34 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
 
+  // --- REGISTRAR PROTOCOLO CUSTOM PARA ACCESO A ARCHIVOS (SCREENSHOTS) ---
+protocol.handle('mango-file', (request) => {
+  // 1. Extraemos la ruta ignorando el esquema mango-file://
+  let filePath = decodeURIComponent(request.url.replace(/^mango-file:\/\/\/?/, ''));
+  
+  // 2. Si la ruta quedó como "c/Users...", la convertimos a "C:/Users..."
+  if (process.platform === 'win32') {
+    // Eliminar barras iniciales que a veces pone Electron
+    filePath = filePath.replace(/^\/+/, '');
+    
+    // Si empieza con una letra seguida de barra (ej: c/), poner los dos puntos
+    if (/^[a-zA-Z]\//.test(filePath)) {
+      filePath = filePath[0] + ':' + filePath.substring(1);
+    }
+  }
+  
+  // 3. Normalizar barras (convertir / en \ para Windows)
+  const finalPath = path.normalize(filePath);
+  console.log('[Gallery Protocol] Cargando:', finalPath);
+  
+  // 4. Servir usando el prefijo file:/// que net.fetch entiende perfectamente
+  return net.fetch('file:///' + finalPath);
+});
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
   
-  // <-- NUEVO: Inicializar conexión con Discord
   rpc.login({ clientId }).catch(console.error)
 
   ipcMain.on('ping', () => console.log('pong'))
@@ -392,6 +624,10 @@ app.whenReady().then(() => {
     return instances
   })
 
+  ipcMain.on('update-discord-rpc', (_, { details, state }) => {
+    setDiscordActivity(details, state, false)
+  })
+
   ipcMain.on('launch-instance', async (event, instance: MinecraftInstance) => {
     console.log(`[Main Process] Preparando lanzamiento de la instancia: ${instance.name}`)
 
@@ -408,14 +644,18 @@ app.whenReady().then(() => {
       const instancePath = path.join(app.getPath('userData'), 'instances', instance.id)
       await fs.mkdir(instancePath, { recursive: true })
 
-      let customVersionName: string | undefined = undefined;
       if (instance.loader === 'Fabric') {
         event.sender.send('download-progress', {
-          percentage: 0, speed: '', phase: 'Configurando motor Fabric...', isDownloading: true
+          percentage: 0, speed: '', phase: 'Preparando entorno de Java y Fabric...', isDownloading: true
         });
-        const result = await setupFabric(instancePath, instance.version);
-        if (result) customVersionName = result;
       }
+
+      const [customJavaPath, fabricVersion] = await Promise.all([
+        ensureJava(instance.version, event),
+        instance.loader === 'Fabric' 
+          ? setupFabric(instancePath, instance.version) 
+          : Promise.resolve(undefined)
+      ]);
 
       let auth;
       if (account && account.type === 'microsoft') {
@@ -431,21 +671,29 @@ app.whenReady().then(() => {
         auth = Authenticator.getAuth(offlineName)
       }
 
-      const opts = {
+      // CORRECCIÓN 1: Construimos las opciones sin el campo "custom" si es Vanilla
+      const opts: any = {
         authorization: auth as any, 
         root: instancePath,
         version: {
           number: instance.version,
-          type: 'release',
-          custom: customVersionName 
+          type: 'release'
         },
         memory: {
           max: `${currentSettings.javaMaxMemory}G`, 
           min: `${currentSettings.javaMinMemory}G`  
-        }
+        },
+        javaPath: customJavaPath 
       }
 
+      // Solo añadimos el custom version (Fabric) si realmente existe
+      if (fabricVersion) {
+        opts.version.custom = fabricVersion
+      }
+
+      // CORRECCIÓN 2: Mostrar logs también en la terminal de VS Code
       launcher.on('debug', (msg: string) => {
+        console.log(`[MCLC] ${msg}`) 
         event.sender.send('minecraft-log', `[LAUNCHER] ${msg}`)
       })
 
@@ -458,10 +706,10 @@ app.whenReady().then(() => {
             percentage: 100, speed: '', phase: '¡Listo!', isDownloading: false
           });
         }
+        console.log(`[MINECRAFT] ${msg}`) 
         event.sender.send('minecraft-log', msg)
       })
 
-      // <-- NUEVO: Al cerrar el juego, Discord vuelve a modo inactivo
       launcher.on('close', (code: number) => {
         event.sender.send('minecraft-log', `[SISTEMA] El juego se cerró con el código: ${code}`)
         setDiscordActivity('Navegando en el Launcher', 'Menú Principal', true)
@@ -517,15 +765,21 @@ app.whenReady().then(() => {
         }
       })
 
-      console.log(`[Main Process] Iniciando lanzamiento con opciones:`, opts)
+      console.log(`[Main Process] Iniciando motor de descarga (MCLC)...`)
       
-      // <-- NUEVO: Al iniciar, Discord muestra la versión y el modloader
       setDiscordActivity(`Jugando: ${instance.name}`, `Versión: ${instance.version} [${instance.loader}]`, true)
       
-      launcher.launch(opts)
+      // CORRECCIÓN 3: Añadir 'await' para atrapar errores fatales de la librería
+      await launcher.launch(opts)
+
     } catch (error) {
-      console.error(`[Main Process] Error al lanzar instancia: ${instance.name}`, error)
+      console.error(`[Main Process] Error FATAL al lanzar instancia: ${instance.name}`, error)
       event.sender.send('minecraft-log', `[ERROR] Falló al lanzar: ${error}`)
+      
+      // Apagar la barra de descargas si falla
+      event.sender.send('download-progress', {
+          percentage: 0, speed: '', phase: 'Error al iniciar', isDownloading: false
+      });
     }
   })
 
@@ -549,6 +803,29 @@ app.whenReady().then(() => {
       console.error(`[Main Process] Error al eliminar instancia: ${id}`, error)
       return await getInstancesFromFile()
     }
+  })
+
+  // --- HANDLERS PARA GESTIONAR CAPTURAS DE PANTALLA ---
+  ipcMain.handle('get-screenshots', async (_, instanceId: string) => {
+    return await getScreenshots(instanceId)
+  })
+
+  ipcMain.handle('delete-screenshot', async (_, instanceId: string, fileName: string) => {
+    return await deleteScreenshot(instanceId, fileName)
+  })
+
+  ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
+    const screenshotsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots')
+    
+    // Crear la carpeta si no existe
+    if (!fsSync.existsSync(screenshotsPath)) {
+      fsSync.mkdirSync(screenshotsPath, { recursive: true })
+    }
+    
+    // Abrir la carpeta con el explorador/finder del sistema
+    shell.openPath(screenshotsPath).catch(err => {
+      console.error('[Screenshots] Error al abrir carpeta:', err)
+    })
   })
 
   createWindow()
