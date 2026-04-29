@@ -87,10 +87,13 @@ declare global {
       getScreenshots: (instanceId: string) => Promise<ScreenshotData[]>
       deleteScreenshot: (instanceId: string, fileName: string) => Promise<boolean>
       openScreenshotFolder: (instanceId: string) => void
+      
+      // ESTA ES LA QUE FALTABA
+      openDataFolder: () => void
 
       cleanInstanceLogs: (instanceId: string) => Promise<CleanLogsResult>
 
-      // === NUEVO: Controladores de la Ventana Secundaria ===
+      // === Controladores de la Ventana Secundaria ===
       openCreateInstanceWindow: () => void
       closeCreateInstanceWindow: () => void
     }

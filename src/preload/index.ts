@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-// ... (todas las interfaces se mantienen igual) ...
 interface DownloadProgressData { percentage: number; speed: string; phase?: string; isDownloading?: boolean }
 interface MinecraftInstance { id: string; name: string; version: string; loader: string; playtime: number; icon: string }
 interface CreateInstanceData { name: string; version: string; loader?: string; icon?: string }
@@ -36,7 +35,10 @@ const api = {
   openScreenshotFolder: (instanceId: string): void => { ipcRenderer.send('open-screenshots-folder', instanceId) },
   cleanInstanceLogs: async (instanceId: string): Promise<CleanLogsResult> => { return await ipcRenderer.invoke('clean-instance-logs', instanceId) },
 
-  // === NUEVO: Controladores de la Ventana Secundaria ===
+  // === ESTA ES LA FUNCIÓN QUE FALTABA ===
+  openDataFolder: (): void => { ipcRenderer.send('open-data-folder') },
+
+  // === Controladores de la Ventana Secundaria ===
   openCreateInstanceWindow: (): void => {
     ipcRenderer.send('open-create-instance-window')
   },

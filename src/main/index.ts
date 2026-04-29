@@ -889,15 +889,42 @@ app.whenReady().then(() => {
   })
 
   ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
-    const screenshotsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots')
-    
-    if (!fsSync.existsSync(screenshotsPath)) {
-      fsSync.mkdirSync(screenshotsPath, { recursive: true })
-    }
-    
-    shell.openPath(screenshotsPath).catch(err => {
-      console.error('[Screenshots] Error al abrir carpeta:', err)
-    })
+  const screenshotsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots')
+  
+  if (!fsSync.existsSync(screenshotsPath)) {
+    fsSync.mkdirSync(screenshotsPath, { recursive: true })
+  }
+  
+  shell.openPath(screenshotsPath).catch(err => {
+    console.error('[Screenshots] Error al abrir carpeta:', err)
+  })
+})
+
+// REEMPLÁZALO POR ESTE OTRO:
+ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
+  let targetPath: string;
+
+  // Si el ID es 'root' o 'root_folder', abrimos la raíz del launcher
+  if (instanceId === 'root' || instanceId === 'root_folder') {
+    targetPath = app.getPath('userData'); // Esto es AppData\Roaming\mangolauncher
+  } else {
+    // Si es una instancia normal, abrimos sus capturas
+    targetPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots');
+  }
+  
+  // Crear la carpeta si no existe (por si las moscas)
+  if (!fsSync.existsSync(targetPath)) {
+    fsSync.mkdirSync(targetPath, { recursive: true });
+  }
+  
+  shell.openPath(targetPath).catch(err => {
+    console.error('[Explorer] Error al abrir carpeta:', err);
+  });
+})
+
+  // --- LISTENER PARA ABRIR LA CARPETA RAÍZ DE DATOS DEL LAUNCHER ---
+  ipcMain.on('open-data-folder', () => {
+    shell.openPath(app.getPath('userData')).catch(err => console.error(err));
   })
 
   createWindow()

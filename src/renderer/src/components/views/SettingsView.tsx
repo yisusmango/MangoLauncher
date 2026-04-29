@@ -15,7 +15,6 @@ function SettingsView(): React.JSX.Element {
     autoUpdate: true
   })
 
-  // NUEVO: Cargar configuración al abrir la vista
   useEffect(() => {
     const loadSettings = async () => {
       // @ts-ignore
@@ -25,7 +24,6 @@ function SettingsView(): React.JSX.Element {
     loadSettings()
   }, [])
 
-  // NUEVO: Función maestra para autoguardar
   const saveAndApplySettings = async (newSettings: SettingsState) => {
     setSettings(newSettings)
     // @ts-ignore
@@ -60,7 +58,7 @@ function SettingsView(): React.JSX.Element {
         <p className="text-zinc-400">Configura tu experiencia de Minecraft Launcher</p>
       </div>
 
-      {/* General Section */}
+      {/* Sección General */}
       <div className="mb-8 bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
         <h3 className="text-xl font-bold text-zinc-50 mb-4 flex items-center gap-2">
           <span>⚙️</span> General
@@ -104,7 +102,7 @@ function SettingsView(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Java Settings Section */}
+      {/* Sección Java (Sin cuadro informativo) */}
       <div className="mb-8 bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
         <h3 className="text-xl font-bold text-zinc-50 mb-4 flex items-center gap-2">
           <span>☕</span> Java
@@ -128,7 +126,6 @@ function SettingsView(): React.JSX.Element {
                 {settings.javaMinMemory} GB
               </div>
             </div>
-            <p className="text-xs text-zinc-500 mt-1">Memoria mínima reservada para el juego</p>
           </div>
 
           <div>
@@ -148,53 +145,27 @@ function SettingsView(): React.JSX.Element {
                 {settings.javaMaxMemory} GB
               </div>
             </div>
-            <p className="text-xs text-zinc-500 mt-1">Memoria máxima que puede usar el juego</p>
-          </div>
-
-          <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded">
-            <p className="text-sm text-zinc-400 mb-2">
-              <span className="font-medium text-zinc-50">Versión Java:</span> 17.0.2 (Bundled)
-            </p>
-            <p className="text-xs text-zinc-500">
-              El launcher incluye Java 17 automáticamente. No necesitas instalar nada.
-            </p>
           </div>
         </div>
       </div>
 
-      {/* About Section */}
+      {/* Operaciones de Sistema */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
-        <h3 className="text-xl font-bold text-zinc-50 mb-4 flex items-center gap-2">
-          <span>ℹ️</span> Acerca de
+        <h3 className="text-xl font-bold text-zinc-50 mb-6 flex items-center gap-2">
+          <span>🛠️</span> Operaciones de Sistema
         </h3>
-
-        <div className="space-y-3">
-          <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
-            <span className="text-sm text-zinc-400">Versión del Launcher</span>
-            <span className="text-sm font-medium text-zinc-50">1.0.9</span>
-          </div>
-          <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
-            <span className="text-sm text-zinc-400">Versión Minecraft</span>
-            <span className="text-sm font-medium text-zinc-50">26.1 (Latest)</span>
-          </div>
-          <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
-            <span className="text-sm text-zinc-400">Desarrollador</span>
-            <span className="text-sm font-medium text-zinc-50">Mango Studios</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-zinc-400">Sitio Web</span>
-            <a href="#" className="text-sm font-medium text-indigo-500 hover:text-indigo-400 transition-colors">
-              www.mangolauncher.dev
-            </a>
-          </div>
-        </div>
-
-        <div className="mt-6 flex gap-3">
-          <button className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-50 font-medium rounded-lg transition-colors">
-            Abrir Carpeta de Datos
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button 
+            onClick={() => window.api.openDataFolder()} 
+            className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-50 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>📁</span> Abrir Carpeta de Datos
           </button>
-          <button className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors">
-            Buscar Actualizaciones
+          <button 
+            onClick={() => window.api.startDownloadUpdate()}
+            className="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>🔄</span> Buscar Actualizaciones
           </button>
         </div>
       </div>

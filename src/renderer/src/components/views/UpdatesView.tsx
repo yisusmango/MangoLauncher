@@ -10,18 +10,30 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.0.10',
+    date: '29 de Abril, 2026',
+    title: 'Refactor de Ajustes y Corrección de Rutas',
+    type: 'patch',
+    changes: [
+      'Corrección crítica en el ruteo del directorio de datos: el botón de "Abrir Carpeta" ahora dirige exactamente a la raíz en Roaming de forma dinámica.',
+      'Rediseño completo de la vista de Ajustes, eliminando información redundante para una interfaz más limpia y profesional.',
+      'Reimplementación de los selectores deslizantes (sliders) dinámicos para la asignación de memoria RAM.',
+      'Ajuste en la comunicación IPC y tipado estricto (TypeScript) para garantizar la ejecución segura de operaciones del sistema.'
+    ]
+  },
+  {
     version: 'v1.0.9',
     date: '29 de Abril, 2026',
     title: 'Mantenimiento Técnico y Ventanas Nativas',
     type: 'minor',
     changes: [
-      'Implementación de Log Cleaner individual: ahora puedes borrar los archivos .log.gz de cada instancia para liberar espacio en disco.',
-      'Sistema de Playtime funcional: el launcher ahora registra y acumula con precisión el tiempo de juego por sesión en cada instancia.',
-      'Nuevo creador de instancias en ventana nativa: interfaz panorámica de 1050px independiente para una mejor gestión visual.',
-      'Nombrado automático inteligente: si no asignas un nombre, la instancia toma el de la versión de Minecraft seleccionada (estilo Prism).',
-      'Integración total con Fabric: consulta en tiempo real a Meta Fabric y GitHub para mostrar versiones y fechas de lanzamiento exactas.',
-      'Refactorización estética: placeholder dinámico con opacidad reducida en el campo de nombre para guiar la creación.',
-      'Navegación independiente: sistema de ruteo por Hash (#/create-instance) para manejar múltiples procesos de ventana.'
+      'Implementación de Log Cleaner individual: ahora puedes borrar archivos .log.gz de cada instancia para liberar espacio.',
+      'Sistema de Playtime funcional: registro y acumulación precisa del tiempo de juego por sesión en cada instancia.',
+      'Nuevo motor de creación en ventana nativa: interfaz panorámica independiente de 1100px para una mejor gestión visual.',
+      'Asignación inteligente de nombres: el sistema sugiere automáticamente el nombre de la versión si el campo se deja vacío.',
+      'Soporte avanzado para Fabric: integración directa con metadatos oficiales para mostrar versiones y fechas exactas.',
+      'Refactorización estética: nueva visualización de sugerencias (ghost text) con opacidad reducida en campos de configuración.',
+      'Arquitectura multiproceso: implementación de ruteo por Hash para gestionar ventanas secundarias de forma eficiente.'
     ]
   },
   {
