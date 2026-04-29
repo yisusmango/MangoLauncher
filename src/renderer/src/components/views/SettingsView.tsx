@@ -171,7 +171,7 @@ function SettingsView(): React.JSX.Element {
         <div className="space-y-3">
           <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
             <span className="text-sm text-zinc-400">Versión del Launcher</span>
-            <span className="text-sm font-medium text-zinc-50">1.0.5</span>
+            <span className="text-sm font-medium text-zinc-50">1.0.6</span>
           </div>
           <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
             <span className="text-sm text-zinc-400">Versión Minecraft</span>
