@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import Sidebar from './components/layout/Sidebar'
-import StatusBar from './components/layout/StatusBar'
 import InstancesView from './components/views/InstancesView'
 import DiscoverView from './components/views/DiscoverView'
 import SettingsView from './components/views/SettingsView'
@@ -8,7 +7,6 @@ import SettingsView from './components/views/SettingsView'
 type ViewType = 'instances' | 'discover' | 'settings'
 
 interface AppState {
-  currentUser: string
   downloadProgress: number
   downloadSpeed: string
   downloadPhase: string
@@ -18,7 +16,6 @@ interface AppState {
 function App(): React.JSX.Element {
   const [currentView, setCurrentView] = useState<ViewType>('instances')
   const [appState, setAppState] = useState<AppState>({
-    currentUser: 'Player123',
     downloadProgress: 0,
     downloadSpeed: '0.00 MB/s',
     downloadPhase: '',
@@ -28,7 +25,6 @@ function App(): React.JSX.Element {
   const handleNavigation = (route: string): void => {
     if (route === 'instances' || route === 'discover' || route === 'settings') {
       setCurrentView(route)
-      console.log(`Navigating to: ${route}`)
     }
   }
 
@@ -61,7 +57,7 @@ function App(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-50">
+    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-50 relative overflow-hidden">
       {/* Main Container */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
@@ -73,14 +69,30 @@ function App(): React.JSX.Element {
         </main>
       </div>
 
-      {/* Status Bar */}
-      <StatusBar
-        currentUser={appState.currentUser}
-        downloadProgress={appState.downloadProgress}
-        downloadSpeed={appState.downloadSpeed}
-        downloadPhase={appState.downloadPhase}
-        isDownloading={appState.isDownloading}
-      />
+      {/* Widget Flotante de Descarga (Solo visible cuando descarga) */}
+      {appState.isDownloading && (
+        <div className="absolute bottom-6 right-6 bg-zinc-900/95 backdrop-blur border border-zinc-800 p-5 rounded-xl shadow-2xl w-80 z-50">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium text-zinc-50 truncate pr-2">
+              {appState.downloadPhase}
+            </span>
+            <span className="text-xs font-semibold text-indigo-400 whitespace-nowrap">
+              {appState.downloadSpeed}
+            </span>
+          </div>
+          <div className="w-full bg-zinc-800/50 rounded-full h-2.5 mb-2 overflow-hidden border border-zinc-800">
+            <div
+              className="bg-indigo-500 h-full rounded-full transition-all duration-300 relative overflow-hidden"
+              style={{ width: `${appState.downloadProgress}%` }}
+            >
+              <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+            </div>
+          </div>
+          <div className="text-right text-xs font-medium text-zinc-500">
+            {appState.downloadProgress}%
+          </div>
+        </div>
+      )}
     </div>
   )
 }

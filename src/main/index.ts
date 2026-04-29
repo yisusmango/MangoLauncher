@@ -1,11 +1,50 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import path from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Client, Authenticator } from 'minecraft-launcher-core'
-import * as msmc from 'msmc' // <-- LIBRERÍA DE MICROSOFT AÑADIDA
+import * as msmc from 'msmc'
 import icon from '../../resources/icon.png?asset'
+import { autoUpdater } from 'electron-updater'
+
+// --- CONFIGURACIÓN DE ACTUALIZACIONES ---
+autoUpdater.autoDownload = false // No descargar automáticamente, preguntar primero
+
+function checkUpdates(mainWindow: BrowserWindow): void {
+  // Iniciar búsqueda
+  autoUpdater.checkForUpdatesAndNotify()
+
+  // Cuando hay una actualización disponible
+  autoUpdater.on('update-available', () => {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Actualización disponible',
+      message: 'Hay una nueva versión de Mango Launcher disponible. ¿Deseas descargarla ahora?',
+      buttons: ['Sí', 'Más tarde'],
+      defaultId: 0
+    }).then((result) => {
+      if (result.response === 0) {
+        autoUpdater.downloadUpdate()
+      }
+    })
+  })
+
+  // Cuando la descarga termina
+  autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Actualización lista',
+      message: 'La nueva versión ha sido descargada. Se instalará automáticamente al cerrar la aplicación.',
+      buttons: ['Entendido']
+    })
+  })
+
+  // Manejo de errores (opcional pero recomendado)
+  autoUpdater.on('error', (err) => {
+    console.error('Error en el auto-updater:', err)
+  })
+}
 
 interface DownloadTracker {
   lastBytesDownloaded: number
@@ -191,7 +230,7 @@ function createWindow(): void {
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon: path.join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -200,6 +239,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    checkUpdates(mainWindow) // Verificar actualizaciones al mostrar la ventana
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
