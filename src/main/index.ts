@@ -14,32 +14,29 @@ function checkUpdates(mainWindow: BrowserWindow): void {
   // Iniciar búsqueda
   autoUpdater.checkForUpdatesAndNotify()
 
-  // Cuando hay una actualización disponible
-  autoUpdater.on('update-available', () => {
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Actualización disponible',
-      message: 'Hay una nueva versión de Mango Launcher disponible. ¿Deseas descargarla ahora?',
-      buttons: ['Sí', 'Más tarde'],
-      defaultId: 0
-    }).then((result) => {
-      if (result.response === 0) {
-        autoUpdater.downloadUpdate()
-      }
+  // 1. Ocultar el diálogo de Windows y enviar alerta al frontend
+  autoUpdater.on('update-available', (info) => {
+    // Mandamos la versión al frontend
+    mainWindow.webContents.send('update-available', info.version)
+  })
+
+  // 2. Escuchar el progreso (opcional, por si luego quieres hacer una barra)
+  autoUpdater.on('download-progress', (progressObj) => {
+    // Puedes reusar tu evento de descarga de Minecraft para la app
+    mainWindow.webContents.send('download-progress', {
+      percentage: Math.round(progressObj.percent),
+      speed: `${(progressObj.bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`,
+      phase: 'Actualizando Mango Launcher...',
+      isDownloading: true
     })
   })
 
-  // Cuando la descarga termina
+  // 3. Cuando termine, le avisamos al frontend para cambiar el botón a "Reiniciar"
   autoUpdater.on('update-downloaded', () => {
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Actualización lista',
-      message: 'La nueva versión ha sido descargada. Se instalará automáticamente al cerrar la aplicación.',
-      buttons: ['Entendido']
-    })
+    mainWindow.webContents.send('update-ready')
   })
 
-  // Manejo de errores (opcional pero recomendado)
+  // Manejo de errores
   autoUpdater.on('error', (err) => {
     console.error('Error en el auto-updater:', err)
   })
@@ -95,7 +92,7 @@ interface AuthData {
 
 const instancesFile = path.join(app.getPath('userData'), 'instances.json')
 const settingsFile = path.join(app.getPath('userData'), 'settings.json') 
-const authFile = path.join(app.getPath('userData'), 'auth.json') // <-- ARCHIVO DE SESIONES
+const authFile = path.join(app.getPath('userData'), 'auth.json')
 
 const sanitizeFolderName = (name: string) => {
   return name.toLowerCase()
@@ -115,8 +112,6 @@ async function getAuthData(): Promise<AuthData> {
   try {
     const data = await fs.readFile(authFile, 'utf-8')
     const parsed = JSON.parse(data)
-    
-    // Migración automática: Si el archivo tiene formato viejo de 1 sola cuenta, lo convierte a Multi-Cuenta
     if (parsed.username && !parsed.accounts) {
       const migrated: AuthData = { selectedId: parsed.uuid, accounts: [parsed] }
       await saveAuthData(migrated)
@@ -238,7 +233,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-    checkUpdates(mainWindow) // Verificar actualizaciones al mostrar la ventana
+    checkUpdates(mainWindow) 
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -264,13 +259,21 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-settings', async () => await getSettings())
   ipcMain.handle('save-settings', async (_, settings) => await saveSettings(settings))
-
-  // === NUEVOS ENDPOINTS DE AUTENTICACIÓN MULTI-CUENTA ===
   ipcMain.handle('get-auth-data', async () => await getAuthData())
   
+  // === COMANDOS DEL UPDATER PARA EL FRONTEND ===
+  ipcMain.on('start-update-download', () => {
+    autoUpdater.downloadUpdate()
+  })
+
+  ipcMain.on('install-update', () => {
+    autoUpdater.quitAndInstall()
+  })
+  // ===========================================
+
   ipcMain.handle('login-offline', async (_, username: string) => {
     const data = await getAuthData()
-    const uuid = 'offline-' + Date.now() // Permite múltiples cuentas offline únicas
+    const uuid = 'offline-' + Date.now() 
     const account: UserAccount = {
       type: 'offline',
       username: username || 'DevPlayer',
@@ -302,9 +305,9 @@ app.whenReady().then(() => {
       const existingIndex = data.accounts.findIndex(a => a.uuid === account.uuid)
       
       if (existingIndex >= 0) {
-        data.accounts[existingIndex] = account // Actualiza token si la cuenta ya existía
+        data.accounts[existingIndex] = account 
       } else {
-        data.accounts.push(account) // Añade nueva cuenta
+        data.accounts.push(account) 
       }
       data.selectedId = account.uuid
       
@@ -328,7 +331,6 @@ app.whenReady().then(() => {
   ipcMain.handle('remove-account', async (_, uuid: string) => {
     const data = await getAuthData()
     data.accounts = data.accounts.filter(a => a.uuid !== uuid)
-    // Si borramos la cuenta activa, seleccionamos otra (o null si no quedan)
     if (data.selectedId === uuid) {
       data.selectedId = data.accounts.length > 0 ? data.accounts[0].uuid : null
     }
@@ -372,7 +374,7 @@ app.whenReady().then(() => {
     try {
       const launcher = new Client()
       const currentSettings = await getSettings() 
-      const account = await getActiveAccount() // <-- LEEMOS LA CUENTA ACTIVA DE LA LISTA
+      const account = await getActiveAccount() 
 
       const downloadTracker: DownloadTracker = {
         lastBytesDownloaded: 0,
@@ -391,7 +393,6 @@ app.whenReady().then(() => {
         if (result) customVersionName = result;
       }
 
-      // LÓGICA DE INYECCIÓN DE SESIÓN
       let auth;
       if (account && account.type === 'microsoft') {
         console.log(`[Main] Autenticando vía Microsoft API para el usuario: ${account.username}`)
@@ -409,7 +410,7 @@ app.whenReady().then(() => {
       }
 
       const opts = {
-        authorization: auth as any, // <-- AQUÍ PASAMOS LA SESIÓN SEGURA
+        authorization: auth as any, 
         root: instancePath,
         version: {
           number: instance.version,

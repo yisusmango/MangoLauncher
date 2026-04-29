@@ -4,6 +4,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 interface DownloadProgressData {
   percentage: number
   speed: string
+  phase?: string
+  isDownloading?: boolean
 }
 
 interface MinecraftInstance {
@@ -29,7 +31,6 @@ interface AppSettings {
   autoUpdate: boolean
 }
 
-// NUEVO: Interfaces de Auth actualizadas para soportar listas
 interface UserAccount {
   type: 'microsoft' | 'offline'
   username: string
@@ -71,8 +72,6 @@ const api = {
   saveSettings: async (settings: AppSettings): Promise<boolean> => {
     return await ipcRenderer.invoke('save-settings', settings)
   },
-  
-  // NUEVO: Controladores del Gestor Multi-Cuenta
   loginMicrosoft: async (): Promise<AuthData | null> => {
     return await ipcRenderer.invoke('login-microsoft')
   },
@@ -87,6 +86,24 @@ const api = {
   },
   removeAccount: async (uuid: string): Promise<AuthData> => {
     return await ipcRenderer.invoke('remove-account', uuid)
+  },
+
+  // === NUEVO: Controladores del Updater ===
+  onUpdateAvailable: (callback: (version: string) => void): void => {
+    ipcRenderer.on('update-available', (_, version) => {
+      callback(version)
+    })
+  },
+  startDownloadUpdate: (): void => {
+    ipcRenderer.send('start-update-download')
+  },
+  onUpdateReady: (callback: () => void): void => {
+    ipcRenderer.on('update-ready', () => {
+      callback()
+    })
+  },
+  installUpdate: (): void => {
+    ipcRenderer.send('install-update')
   }
 }
 

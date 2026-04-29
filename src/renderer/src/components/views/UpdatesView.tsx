@@ -10,6 +10,15 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.0.5',
+    date: '28 de Abril, 2026',
+    title: 'Interfaz',
+    type: 'patch',
+    changes: [
+      'Nuevo dialogo para el autoupdater.',
+    ]
+  },  
+  {
     version: 'v1.0.4',
     date: '28 de Abril, 2026',
     title: 'Interfaz y Privacidad',

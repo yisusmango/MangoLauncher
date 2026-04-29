@@ -3,6 +3,8 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 interface DownloadProgressData {
   percentage: number
   speed: string
+  phase?: string
+  isDownloading?: boolean
 }
 
 interface MinecraftInstance {
@@ -21,6 +23,27 @@ interface CreateInstanceData {
   icon?: string
 }
 
+interface AppSettings {
+  javaMinMemory: string
+  javaMaxMemory: string
+  theme: string
+  autoUpdate: boolean
+}
+
+interface UserAccount {
+  type: 'microsoft' | 'offline'
+  username: string
+  uuid: string
+  access_token?: string
+  client_token?: string
+  profile?: any
+}
+
+interface AuthData {
+  selectedId: string | null
+  accounts: UserAccount[]
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -31,6 +54,19 @@ declare global {
       getMinecraftVersions: () => Promise<string[]>
       deleteInstance: (id: string) => Promise<MinecraftInstance[]>
       onDownloadProgress: (callback: (data: DownloadProgressData) => void) => void
+      getSettings: () => Promise<AppSettings>
+      saveSettings: (settings: AppSettings) => Promise<boolean>
+      loginMicrosoft: () => Promise<AuthData | null>
+      loginOffline: (username: string) => Promise<AuthData>
+      getAuthData: () => Promise<AuthData>
+      switchAccount: (uuid: string) => Promise<AuthData>
+      removeAccount: (uuid: string) => Promise<AuthData>
+      
+      // === NUEVO: Métodos del Updater ===
+      onUpdateAvailable: (callback: (version: string) => void) => void
+      startDownloadUpdate: () => void
+      onUpdateReady: (callback: () => void) => void
+      installUpdate: () => void
     }
   }
 }
