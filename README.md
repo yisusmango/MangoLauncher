@@ -61,8 +61,8 @@ Si quieres clonar el proyecto, modificar el código o compilar tu propia versió
 
 1. Clona este repositorio:
    ```bash
-   git clone [https://github.com/yisusmango/MangoLauncher.git](https://github.com/yisusmango/MangoLauncher.git)
-   cd MangoLauncher
+   git clone https://github.com/yisusmango/MangoLauncher.git
+cd MangoLauncher
    ```
 
 2. Instala las dependencias:
