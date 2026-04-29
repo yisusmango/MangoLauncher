@@ -10,6 +10,8 @@ interface SidebarItem {
 interface SidebarProps {
   activeView: string
   onNavigate: (route: string) => void
+  onToggleConsole: () => void // <-- Nueva prop para abrir la consola
+  isConsoleOpen: boolean      // <-- Nueva prop para saber si está abierta
 }
 
 interface UserAccount {
@@ -29,7 +31,7 @@ const sidebarItems: SidebarItem[] = [
   { id: 'settings', label: 'Ajustes', icon: '⚙️', tooltip: 'Ajustes de la aplicación' }
 ]
 
-function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
+function Sidebar({ activeView, onNavigate, onToggleConsole, isConsoleOpen }: SidebarProps): React.JSX.Element {
   const [authData, setAuthData] = useState<AuthData>({ selectedId: null, accounts: [] })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -109,7 +111,6 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
 
   return (
     <aside className="w-16 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-4 gap-2 z-40 relative">
-      {/* BOTÓN DE CHANGELOG (Antes era Home redundante) */}
       <button
         onClick={() => onNavigate('updates')}
         className={`w-12 h-12 rounded-lg transition-all duration-200 flex items-center justify-center font-bold text-lg mb-2 group relative ${
@@ -144,6 +145,22 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
       ))}
 
       <div className="flex-1"></div>
+
+      {/* --- NUEVO BOTÓN DE CONSOLA --- */}
+      <button
+        onClick={onToggleConsole}
+        className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
+          isConsoleOpen
+            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50'
+        }`}
+      >
+        <span className="text-xl font-mono">{'>_'}</span>
+        <span className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-zinc-50 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+          Consola de Logs
+        </span>
+      </button>
+
       <div className="w-8 h-px bg-zinc-800 my-2"></div>
 
       {/* WIDGET DE AVATAR */}
@@ -151,7 +168,7 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
         onClick={() => setIsModalOpen(true)}
         className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 group relative ${
           activeAccount 
-            ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-zinc-900' 
+            ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-zinc-900' 
             : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50'
         }`}
       >
@@ -172,7 +189,7 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
         </span>
       </button>
 
-      {/* MODAL DE AUTENTICACIÓN (Sin cambios) */}
+      {/* MODAL DE AUTENTICACIÓN */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={handleCloseModal}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -187,7 +204,7 @@ function Sidebar({ activeView, onNavigate }: SidebarProps): React.JSX.Element {
                       key={acc.uuid} 
                       className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                         acc.uuid === authData.selectedId 
-                          ? 'border-emerald-500 bg-emerald-500/10' 
+                          ? 'border-indigo-500 bg-indigo-500/10' 
                           : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
                       }`}
                     >

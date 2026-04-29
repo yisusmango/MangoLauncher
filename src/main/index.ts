@@ -423,16 +423,27 @@ app.whenReady().then(() => {
         }
       }
 
-      launcher.on('debug', (_msg: string) => {})
+      // === 1. Capturar mensajes de depuración del launcher ===
+      launcher.on('debug', (msg: string) => {
+        event.sender.send('minecraft-log', `[LAUNCHER] ${msg}`)
+      })
 
       let hasStarted = false;
-      launcher.on('data', (_msg: string) => {
+      
+      // === 2. Capturar la salida real (stdout) del juego de Minecraft ===
+      launcher.on('data', (msg: string) => {
         if (!hasStarted) {
           hasStarted = true;
           event.sender.send('download-progress', {
             percentage: 100, speed: '', phase: '¡Listo!', isDownloading: false
           });
         }
+        event.sender.send('minecraft-log', msg)
+      })
+
+      // === 3. Capturar si el juego se cierra por un crash o finaliza ===
+      launcher.on('close', (code: number) => {
+        event.sender.send('minecraft-log', `[SISTEMA] El juego se cerró con el código: ${code}`)
       })
 
       let currentPhase = '';
@@ -489,6 +500,7 @@ app.whenReady().then(() => {
       launcher.launch(opts)
     } catch (error) {
       console.error(`[Main Process] Error al lanzar instancia: ${instance.name}`, error)
+      event.sender.send('minecraft-log', `[ERROR] Falló al lanzar: ${error}`)
     }
   })
 

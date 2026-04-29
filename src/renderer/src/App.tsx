@@ -4,7 +4,8 @@ import InstancesView from './components/views/InstancesView'
 import DiscoverView from './components/views/DiscoverView'
 import SettingsView from './components/views/SettingsView'
 import UpdatesView from './components/views/UpdatesView'
-import UpdateToast from './components/layout/UpdateToast' // <-- IMPORTAMOS EL TOAST
+import UpdateToast from './components/layout/UpdateToast'
+import LogConsole from './components/layout/LogConsole' // <-- NUEVA IMPORTACIÓN
 
 type ViewType = 'instances' | 'discover' | 'settings' | 'updates'
 
@@ -18,11 +19,13 @@ interface AppState {
 function App(): React.JSX.Element {
   const [currentView, setCurrentView] = useState<ViewType>('instances')
   
-  // === ESTADOS PARA LA ACTUALIZACIÓN ===
+  // === ESTADOS PARA LA CONSOLA ===
+  const [logs, setLogs] = useState<string[]>([])
+  const [isConsoleOpen, setIsConsoleOpen] = useState(false)
+  
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
   const [isUpdateReady, setIsUpdateReady] = useState(false)
   const [showUpdateToast, setShowUpdateToast] = useState(false)
-  // =====================================
 
   const [appState, setAppState] = useState<AppState>({
     downloadProgress: 0,
@@ -39,7 +42,7 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.api) {
-      // Escuchar el progreso de las descargas (juego o updates)
+      // 1. Escuchar progreso de descargas
       window.api.onDownloadProgress((data: any) => {
         setAppState((prevState) => ({
           ...prevState,
@@ -50,7 +53,18 @@ function App(): React.JSX.Element {
         }))
       })
 
-      // === ESCUCHAR EVENTOS DEL AUTO-UPDATER ===
+      // 2. ESCUCHAR LOGS DE MINECRAFT
+      window.api.onMinecraftLog((log: string) => {
+        setLogs(prev => {
+          const newLogs = [...prev, log]
+          // Mantenemos solo los últimos 500 logs para no saturar la RAM
+          return newLogs.slice(-500)
+        })
+        // Opcional: Abrir consola automáticamente si hay un error crítico
+        if (log.includes('[ERROR]')) setIsConsoleOpen(true)
+      })
+
+      // 3. Eventos del Auto-Updater
       window.api.onUpdateAvailable((version: string) => {
         setUpdateVersion(version)
         setShowUpdateToast(true)
@@ -58,47 +72,51 @@ function App(): React.JSX.Element {
 
       window.api.onUpdateReady(() => {
         setIsUpdateReady(true)
-        setShowUpdateToast(true) // Volvemos a mostrar el toast para pedir instalación
+        setShowUpdateToast(true)
       })
-      // ==========================================
     }
   }, [])
 
-  // === MANEJADOR DE ACCIONES DEL TOAST ===
   const handleUpdateAction = () => {
     if (isUpdateReady) {
-      window.api.installUpdate() // Cierra e instala
+      window.api.installUpdate()
     } else {
-      window.api.startDownloadUpdate() // Empieza la descarga
-      setShowUpdateToast(false) // Ocultamos el toast (el progreso se verá en el widget inferior)
+      window.api.startDownloadUpdate()
+      setShowUpdateToast(false)
     }
   }
-  // =======================================
 
   const renderView = (): React.JSX.Element => {
     switch (currentView) {
-      case 'instances':
-        return <InstancesView />
-      case 'discover':
-        return <DiscoverView />
-      case 'settings':
-        return <SettingsView />
-      case 'updates':
-        return <UpdatesView />
-      default:
-        return <InstancesView />
+      case 'instances': return <InstancesView />
+      case 'discover': return <DiscoverView />
+      case 'settings': return <SettingsView />
+      case 'updates': return <UpdatesView />
+      default: return <InstancesView />
     }
   }
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-200 select-none overflow-hidden border border-zinc-800/50 rounded-xl relative">
-      <Sidebar activeView={currentView} onNavigate={handleNavigation} />
+      {/* Sidebar con props de consola */}
+      <Sidebar 
+        activeView={currentView} 
+        onNavigate={handleNavigation} 
+        onToggleConsole={() => setIsConsoleOpen(!isConsoleOpen)}
+        isConsoleOpen={isConsoleOpen}
+      />
 
       <main className="flex-1 overflow-auto bg-zinc-950 custom-scrollbar">
         <div className="p-8">{renderView()}</div>
       </main>
 
-      {/* NOTIFICACIÓN CUSTOM DE ACTUALIZACIÓN */}
+      {/* CONSOLA DE LOGS */}
+      <LogConsole 
+        logs={logs} 
+        isOpen={isConsoleOpen} 
+        onClose={() => setIsConsoleOpen(false)} 
+      />
+
       {showUpdateToast && updateVersion && (
         <UpdateToast 
           version={updateVersion} 
@@ -108,7 +126,6 @@ function App(): React.JSX.Element {
         />
       )}
 
-      {/* WIDGET DE DESCARGA FLOTANTE (Se usará tanto para MC como para el Updater) */}
       {appState.isDownloading && (
         <div className="absolute bottom-6 right-6 bg-zinc-900/95 backdrop-blur border border-zinc-800 p-5 rounded-xl shadow-2xl w-80 z-50">
           <div className="flex justify-between items-center mb-3">

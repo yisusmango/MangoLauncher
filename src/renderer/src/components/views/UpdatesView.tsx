@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.0.6',
+    date: '28 de Abril, 2026',
+    title: 'Telemetría y Control Total',
+    type: 'major',
+    changes: [
+      'Implementación de Mango Terminal: Consola de logs en tiempo real para monitorear el arranque de Minecraft y detectar errores de mods.',
+      'Nuevo sistema de notificaciones "Mango Toast" para actualizaciones de la aplicación, eliminando ventanas nativas del sistema.',
+      'Panel lateral expandido con acceso directo a la consola técnica (>_).',
+      'Optimización del consumo de memoria al limitar el historial de logs en el frontend.',
+      'Mejoras en el auto-scroll de la terminal y resaltado de errores en color rojo.'
+    ]
+  },  
+  {
     version: 'v1.0.5',
     date: '28 de Abril, 2026',
     title: 'Interfaz',

@@ -62,11 +62,14 @@ declare global {
       switchAccount: (uuid: string) => Promise<AuthData>
       removeAccount: (uuid: string) => Promise<AuthData>
       
-      // === NUEVO: Métodos del Updater ===
+      // === Controladores del Updater ===
       onUpdateAvailable: (callback: (version: string) => void) => void
       startDownloadUpdate: () => void
       onUpdateReady: (callback: () => void) => void
       installUpdate: () => void
+
+      // === NUEVO: Controlador de Logs de Minecraft ===
+      onMinecraftLog: (callback: (log: string) => void) => void
     }
   }
 }

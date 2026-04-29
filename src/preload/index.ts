@@ -88,7 +88,7 @@ const api = {
     return await ipcRenderer.invoke('remove-account', uuid)
   },
 
-  // === NUEVO: Controladores del Updater ===
+  // === Controladores del Updater ===
   onUpdateAvailable: (callback: (version: string) => void): void => {
     ipcRenderer.on('update-available', (_, version) => {
       callback(version)
@@ -104,6 +104,13 @@ const api = {
   },
   installUpdate: (): void => {
     ipcRenderer.send('install-update')
+  },
+
+  // === NUEVO: Controlador de Logs de Minecraft ===
+  onMinecraftLog: (callback: (log: string) => void): void => {
+    ipcRenderer.on('minecraft-log', (_, log) => {
+      callback(log)
+    })
   }
 }
 
