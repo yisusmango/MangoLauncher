@@ -5,7 +5,6 @@ import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Client, Authenticator } from 'minecraft-launcher-core'
 import * as msmc from 'msmc'
-import icon from '../../resources/icon.png?asset'
 import { autoUpdater } from 'electron-updater'
 
 // --- CONFIGURACIÓN DE ACTUALIZACIONES ---
