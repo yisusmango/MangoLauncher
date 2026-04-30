@@ -10,7 +10,7 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
-    version: 'v1.1.0',
+    version: 'v1.1.1',
     date: '29 de Abril, 2026',
     title: 'Actualización de Mods: Modrinth y Estado de Ventana',
     type: 'major',
