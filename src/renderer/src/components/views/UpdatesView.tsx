@@ -10,6 +10,21 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.1.0',
+    date: '29 de Abril, 2026',
+    title: 'Actualización de Mods: Modrinth y Estado de Ventana',
+    type: 'major',
+    changes: [
+      'Integración total con la API de Modrinth: busca e instala miles de mods directamente desde el launcher.',
+      'Motor de dependencias inteligente: el instalador ahora detecta y descarga automáticamente los mods requeridos (ej. Sodium al instalar Iris).',
+      'Sistema de notificaciones "Mango Toast": avisos elegantes y animados con auto-cierre de 3 segundos que detallan los archivos instalados.',
+      'Persistencia de Ventana: el launcher ahora recuerda su tamaño y resolución; se abrirá exactamente como lo cerraste.',
+      'Seguridad de Instancias: bloqueo automático del gestor de mods en versiones Vanilla para evitar errores de compatibilidad.',
+      'Acceso rápido a archivos: nuevo botón "Abrir Carpeta de Mods" dentro del gestor para ir directo al directorio de mods de la instancia.',
+      'Gestión local avanzada: permite activar, desactivar o eliminar permanentemente archivos .jar desde la interfaz.'
+    ]
+  },
+  {
     version: 'v1.0.10',
     date: '29 de Abril, 2026',
     title: 'Refactor de Ajustes y Corrección de Rutas',

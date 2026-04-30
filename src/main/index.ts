@@ -109,6 +109,17 @@ interface MinecraftVersion {
   releaseTime: string
 }
 
+interface ModrinthSearchResult {
+  hits: Array<{
+    project_id: string;
+    title: string;
+    description: string;
+    icon_url: string;
+    downloads: number;
+    author: string;
+  }>;
+}
+
 interface VersionManifest {
   versions: MinecraftVersion[]
 }
@@ -118,6 +129,8 @@ interface AppSettings {
   javaMaxMemory: string
   theme: string
   autoUpdate: boolean
+  windowWidth?: number
+  windowHeight?: number
 }
 
 interface UserAccount {
@@ -148,7 +161,9 @@ const defaultSettings: AppSettings = {
   javaMinMemory: '2',
   javaMaxMemory: '4',
   theme: 'dark',
-  autoUpdate: true
+  autoUpdate: true,
+  windowWidth: 900,  // Ancho por defecto
+  windowHeight: 670  // Alto por defecto
 }
 
 // --- SISTEMA INTELIGENTE DE JAVA ---
@@ -466,35 +481,53 @@ function openCreateInstanceWindow(parentWindow: BrowserWindow): void {
 }
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
-    show: false,
-    autoHideMenuBar: true,
-    icon: path.join(__dirname, '../../resources/icon.png'),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true
+  // 1. Cargamos los ajustes antes de crear la ventana
+  getSettings().then(settings => {
+    const mainWindow = new BrowserWindow({
+      width: settings.windowWidth || 900,
+      height: settings.windowHeight || 670,
+      show: false,
+      autoHideMenuBar: true,
+      icon: path.join(__dirname, '../../resources/icon.png'),
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        webSecurity: false,
+        allowRunningInsecureContent: true
+      }
+    })
+
+    // 2. Guardar tamaño cuando el usuario termina de redimensionar
+    let resizeTimeout: NodeJS.Timeout
+    mainWindow.on('resize', () => {
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(async () => {
+        const [width, height] = mainWindow.getSize()
+        const currentSettings = await getSettings()
+        await saveSettings({ 
+          ...currentSettings, 
+          windowWidth: width, 
+          windowHeight: height 
+        })
+      }, 500)
+    })
+
+    mainWindow.on('ready-to-show', () => {
+      mainWindow.show()
+      checkUpdates(mainWindow) 
+    })
+
+    mainWindow.webContents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url)
+      return { action: 'deny' }
+    })
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    } else {
+      mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
     }
   })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
-    checkUpdates(mainWindow) 
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
 }
 
 app.whenReady().then(() => {
@@ -888,21 +921,156 @@ app.whenReady().then(() => {
     return await deleteScreenshot(instanceId, fileName)
   })
 
-  ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
-  const screenshotsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'screenshots')
-  
-  if (!fsSync.existsSync(screenshotsPath)) {
-    fsSync.mkdirSync(screenshotsPath, { recursive: true })
-  }
-  
-  shell.openPath(screenshotsPath).catch(err => {
-    console.error('[Screenshots] Error al abrir carpeta:', err)
+// --- BUSCAR MODS ---
+  ipcMain.handle('search-mods', async (_, query: string) => {
+    try {
+      const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(query)}&facets=[["categories:fabric"]]&limit=15`
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`Error: ${response.statusText}`)
+      const data: ModrinthSearchResult = await response.json()
+      return data.hits
+    } catch (error) {
+      console.error('[Modrinth] Error:', error)
+      throw error
+    }
   })
-})
 
-// REEMPLÁZALO POR ESTE OTRO:
-ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
-  let targetPath: string;
+  // --- INSTALAR MOD Y SUS DEPENDENCIAS (RECURSIVO) ---
+// --- INSTALAR MOD Y SUS DEPENDENCIAS (RECURSIVO) ---
+  ipcMain.handle('install-mod', async (_, projectId: string, instanceId: string, mcVersion: string, loader: string) => {
+    try {
+      const loaderParam = loader.toLowerCase()
+      const modsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'mods')
+
+      if (!fsSync.existsSync(modsPath)) {
+        await fsSync.promises.mkdir(modsPath, { recursive: true })
+      }
+
+      const processedProjects = new Set<string>()
+      // NUEVO: Arreglo para guardar los nombres de los archivos descargados
+      const downloadedFiles: string[] = [] 
+
+      const downloadModWithDeps = async (id: string, isVersionId: boolean = false) => {
+        if (processedProjects.has(id)) return 
+
+        let versionData
+        if (isVersionId) {
+          const res = await fetch(`https://api.modrinth.com/v2/version/${id}`)
+          if (!res.ok) return
+          versionData = await res.json()
+        } else {
+          const url = `https://api.modrinth.com/v2/project/${id}/version?game_versions=["${mcVersion}"]&loaders=["${loaderParam}"]`
+          const res = await fetch(url)
+          if (!res.ok) return
+          const versions = await res.json()
+          if (versions.length === 0) return 
+          versionData = versions[0]
+        }
+
+        processedProjects.add(versionData.project_id || id)
+
+        const primaryFile = versionData.files.find((f: any) => f.primary) || versionData.files[0]
+        if (!primaryFile) return
+
+        const filePath = path.join(modsPath, primaryFile.filename)
+
+        if (!fsSync.existsSync(filePath)) {
+          console.log(`[Modrinth] Descargando: ${primaryFile.filename}...`)
+          const fileResponse = await fetch(primaryFile.url)
+          
+          if (fileResponse.ok) {
+            const fileStream = fsSync.createWriteStream(filePath)
+            const body = Readable.fromWeb(fileResponse.body as any)
+            body.pipe(fileStream)
+            await finished(fileStream)
+            
+            // Guardamos el nombre del archivo recién descargado
+            downloadedFiles.push(primaryFile.filename)
+          }
+        }
+
+        if (versionData.dependencies && versionData.dependencies.length > 0) {
+          for (const dep of versionData.dependencies) {
+            if (dep.dependency_type === 'required') {
+              if (dep.version_id) {
+                await downloadModWithDeps(dep.version_id, true)
+              } else if (dep.project_id) {
+                await downloadModWithDeps(dep.project_id, false)
+              }
+            }
+          }
+        }
+      }
+
+      await downloadModWithDeps(projectId, false)
+
+      // Retornamos el arreglo de archivos descargados a la interfaz
+      if (downloadedFiles.length === 0) {
+        return { success: true, message: 'El mod y sus dependencias ya estaban instalados.', downloadedFiles }
+      } else if (downloadedFiles.length === 1) {
+        return { success: true, message: `Mod instalado: ${downloadedFiles[0]}`, downloadedFiles }
+      } else {
+        return { success: true, message: `Se instalaron ${downloadedFiles.length} archivos.`, downloadedFiles }
+      }
+
+    } catch (error: any) {
+      console.error('[Modrinth] Error crítico instalando mod:', error)
+      return { success: false, message: error.message }
+    }
+  })
+
+  // --- GESTIÓN DE MODS INSTALADOS ---
+  ipcMain.handle('get-installed-mods', async (_, instanceId: string) => {
+    try {
+      const modsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'mods')
+      if (!fsSync.existsSync(modsPath)) return []
+      
+      const files = await fs.readdir(modsPath)
+      return files
+        .filter(file => file.endsWith('.jar') || file.endsWith('.jar.disabled'))
+        .map(file => ({
+          fileName: file,
+          isEnabled: !file.endsWith('.disabled')
+        }))
+    } catch (error) {
+      console.error('[Mods] Error leyendo carpeta de mods:', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('toggle-mod', async (_, instanceId: string, fileName: string) => {
+    try {
+      const modsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'mods')
+      const oldPath = path.join(modsPath, fileName)
+      const isCurrentlyDisabled = fileName.endsWith('.disabled')
+      
+      const newFileName = isCurrentlyDisabled 
+        ? fileName.replace('.disabled', '') 
+        : `${fileName}.disabled`
+        
+      const newPath = path.join(modsPath, newFileName)
+      
+      await fsSync.promises.rename(oldPath, newPath)
+      return { success: true, newFileName }
+    } catch (error: any) {
+      console.error('[Mods] Error al alternar mod:', error)
+      return { success: false, message: error.message }
+    }
+  })
+
+  ipcMain.handle('delete-mod', async (_, instanceId: string, fileName: string) => {
+    try {
+      const filePath = path.join(app.getPath('userData'), 'instances', instanceId, 'mods', fileName)
+      await fsSync.promises.unlink(filePath)
+      return { success: true }
+    } catch (error: any) {
+      console.error('[Mods] Error al borrar mod:', error)
+      return { success: false, message: error.message }
+    }
+  })
+
+  ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
+    let targetPath: string;
 
   // Si el ID es 'root' o 'root_folder', abrimos la raíz del launcher
   if (instanceId === 'root' || instanceId === 'root_folder') {
@@ -933,6 +1101,19 @@ ipcMain.on('open-screenshots-folder', (_, instanceId: string) => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+ipcMain.on('open-mods-folder', (_, instanceId: string) => {
+    const modsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'mods');
+    
+    // Si la carpeta no existe (instancia nueva), la creamos para que no de error
+    if (!fsSync.existsSync(modsPath)) {
+      fsSync.mkdirSync(modsPath, { recursive: true });
+    }
+    
+    shell.openPath(modsPath).catch(err => {
+      console.error('[Explorer] Error al abrir carpeta de mods:', err);
+    });
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

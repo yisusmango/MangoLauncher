@@ -34,7 +34,14 @@ const api = {
   deleteScreenshot: async (instanceId: string, fileName: string): Promise<boolean> => { return await ipcRenderer.invoke('delete-screenshot', instanceId, fileName) },
   openScreenshotFolder: (instanceId: string): void => { ipcRenderer.send('open-screenshots-folder', instanceId) },
   cleanInstanceLogs: async (instanceId: string): Promise<CleanLogsResult> => { return await ipcRenderer.invoke('clean-instance-logs', instanceId) },
-
+  installMod: async (projectId: string, instanceId: string, mcVersion: string, loader: string) => { 
+  return await ipcRenderer.invoke('install-mod', projectId, instanceId, mcVersion, loader) 
+},
+  searchMods: async (query: string) => { return await ipcRenderer.invoke('search-mods', query) },
+  getInstalledMods: async (instanceId: string) => { return await ipcRenderer.invoke('get-installed-mods', instanceId) },
+  toggleMod: async (instanceId: string, fileName: string) => { return await ipcRenderer.invoke('toggle-mod', instanceId, fileName) },
+  deleteMod: async (instanceId: string, fileName: string) => { return await ipcRenderer.invoke('delete-mod', instanceId, fileName) },
+  openModsFolder: (instanceId: string): void => { ipcRenderer.send('open-mods-folder', instanceId) },
   // === ESTA ES LA FUNCIÓN QUE FALTABA ===
   openDataFolder: (): void => { ipcRenderer.send('open-data-folder') },
 

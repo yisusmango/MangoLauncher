@@ -1,6 +1,6 @@
 # 🥭 Mango Launcher
 
-![Version](https://img.shields.io/badge/version-1.0.10-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
 ![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)
 ![Electron](https://img.shields.io/badge/Electron-191970?style=flat&logo=Electron&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)

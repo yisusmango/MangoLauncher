@@ -74,7 +74,11 @@ declare global {
       getAuthData: () => Promise<AuthData>
       switchAccount: (uuid: string) => Promise<AuthData>
       removeAccount: (uuid: string) => Promise<AuthData>
-      
+      installMod: (projectId: string, instanceId: string, mcVersion: string, loader: string) => Promise<{success: boolean, message: string, downloadedFiles?: string[]}>;
+      openModsFolder: (instanceId: string) => void;
+      getInstalledMods: (instanceId: string) => Promise<{fileName: string, isEnabled: boolean}[]>;
+      toggleMod: (instanceId: string, fileName: string) => Promise<{success: boolean, newFileName?: string, message?: string}>;
+      deleteMod: (instanceId: string, fileName: string) => Promise<{success: boolean, message?: string}>;
       onUpdateAvailable: (callback: (version: string) => void) => void
       startDownloadUpdate: () => void
       onUpdateReady: (callback: () => void) => void
