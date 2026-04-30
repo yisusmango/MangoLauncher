@@ -16,16 +16,21 @@ interface InstanceCardProps {
 }
 
 function getLoaderColor(loader: string): string {
-  switch (loader) {
-    case 'Vanilla':
-      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-    case 'Fabric':
-      return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-    case 'Forge':
-      return 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-    default:
-      return 'bg-zinc-700/20 text-zinc-400 border-zinc-700/30'
+  const normalized = loader.toLowerCase()
+
+  if (normalized.includes('fabric')) {
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
   }
+
+  if (normalized.includes('forge')) {
+    return 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+  }
+
+  if (normalized.includes('vanilla')) {
+    return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+  }
+
+  return 'bg-zinc-700/20 text-zinc-400 border-zinc-700/30'
 }
 
 // Función para convertir segundos a un texto legible

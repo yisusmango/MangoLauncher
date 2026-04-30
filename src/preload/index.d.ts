@@ -5,6 +5,9 @@ interface DownloadProgressData {
   speed: string
   phase?: string
   isDownloading?: boolean
+  downloadFile?: string
+  remainingBytes?: number
+  totalBytes?: number
 }
 
 interface MinecraftInstance {
@@ -12,6 +15,7 @@ interface MinecraftInstance {
   name: string
   version: string
   loader: string
+  loaderVersion?: string
   playtime: number
   icon: string
 }
@@ -20,6 +24,7 @@ interface CreateInstanceData {
   name: string
   version: string
   loader?: string
+  loaderVersion?: string
   icon?: string
 }
 
@@ -99,6 +104,7 @@ declare global {
 
       // === Controladores de la Ventana Secundaria ===
       openCreateInstanceWindow: () => void
+      openModsManagerWindow: (instanceId: string, instanceName: string, version: string, loader: string) => void
       closeCreateInstanceWindow: () => void
     }
   }

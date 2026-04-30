@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const updates: ChangelogEntry[] = [
   {
+    version: 'v1.1.2',
+    date: '30 de Abril, 2026',
+    title: 'Descargas Ultrarrápidas y Nuevo Gestor de Mods',
+    type: 'minor',
+    changes: [
+      'Corrección definitiva en el motor de Modrinth: el instalador ahora procesa correctamente los formatos de versión, garantizando la descarga de todos los mods (.jar) y sus dependencias sin falsos positivos.',
+      'Optimización extrema en la descarga de instancias: reestructuración del gestor de red para que los assets y versiones de Minecraft se descarguen a máxima velocidad sin cuellos de botella.',
+      'Rediseño total del Gestor de Mods: nueva interfaz de usuario (UI) más limpia, moderna e intuitiva para administrar tu colección de forma más fluida.'
+    ]
+  },
+  {
     version: 'v1.1.1',
     date: '29 de Abril, 2026',
     title: 'Actualización de Mods: Modrinth y Estado de Ventana',

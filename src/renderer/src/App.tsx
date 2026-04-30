@@ -8,8 +8,9 @@ import GalleryView from './components/views/GalleryView'
 import UpdateToast from './components/layout/UpdateToast'
 import LogConsole from './components/layout/LogConsole'
 
-// NUEVO: Importamos la vista dedicada para la ventana secundaria
+// NUEVO: Importamos las vistas dedicadas para ventanas secundarias
 import CreateInstanceWindow from './components/views/CreateInstanceWindow'
+import ModsManagerWindow from './components/views/ModsManagerWindow'
 
 type ViewType = 'instances' | 'discover' | 'settings' | 'updates' | 'gallery'
 
@@ -17,12 +18,14 @@ interface AppState {
   downloadProgress: number
   downloadSpeed: string
   downloadPhase: string
+  downloadFile: string
+  downloadRemaining: string
   isDownloading: boolean
 }
 
 function App(): React.JSX.Element {
   // === NUEVO: DETECCIÓN DE VENTANA ===
-  const [isSecondaryWindow, setIsSecondaryWindow] = useState(false)
+  const [secondaryRoute, setSecondaryRoute] = useState<'create-instance' | 'mods-manager' | null>(null)
 
   const [currentView, setCurrentView] = useState<ViewType>('instances')
   
@@ -38,13 +41,17 @@ function App(): React.JSX.Element {
     downloadProgress: 0,
     downloadSpeed: '0.00 MB/s',
     downloadPhase: '',
+    downloadFile: '',
+    downloadRemaining: '',
     isDownloading: false
   })
 
   useEffect(() => {
-    // Detectamos si esta ventana fue abierta con el hash '#create-instance' o '#/create-instance'
-    if (window.location.hash.includes('create-instance')) {
-      setIsSecondaryWindow(true)
+    const hash = window.location.hash.toLowerCase()
+    if (hash.includes('create-instance')) {
+      setSecondaryRoute('create-instance')
+    } else if (hash.includes('mods-manager')) {
+      setSecondaryRoute('mods-manager')
     }
   }, [])
 
@@ -69,15 +76,21 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     // Si estamos en la ventana secundaria, no necesitamos escuchar descargas ni updates aquí
-    if (isSecondaryWindow) return
+    if (secondaryRoute) return
 
     if (typeof window !== 'undefined' && window.api) {
       window.api.onDownloadProgress((data: any) => {
+        const remaining = typeof data.remainingBytes === 'number' && typeof data.totalBytes === 'number'
+          ? `${(data.remainingBytes / (1024 * 1024)).toFixed(2)} MB faltantes de ${(data.totalBytes / (1024 * 1024)).toFixed(2)} MB`
+          : ''
+
         setAppState((prevState) => ({
           ...prevState,
           downloadProgress: data.percentage,
           downloadSpeed: data.speed,
           downloadPhase: data.phase || 'Descargando...',
+          downloadFile: data.downloadFile || '',
+          downloadRemaining: remaining,
           isDownloading: data.isDownloading !== false 
         }))
       })
@@ -100,7 +113,7 @@ function App(): React.JSX.Element {
         setShowUpdateToast(true)
       })
     }
-  }, [isSecondaryWindow])
+  }, [secondaryRoute])
 
   const handleUpdateAction = () => {
     if (isUpdateReady) {
@@ -123,7 +136,7 @@ function App(): React.JSX.Element {
   }
 
   // === RENDERIZADO CONDICIONAL PARA VENTANA SECUNDARIA ===
-  if (isSecondaryWindow) {
+  if (secondaryRoute === 'create-instance') {
     return (
       <div className="h-screen w-screen bg-zinc-950 text-zinc-200 overflow-hidden">
         <CreateInstanceWindow />
@@ -131,9 +144,17 @@ function App(): React.JSX.Element {
     )
   }
 
+  if (secondaryRoute === 'mods-manager') {
+    return (
+      <div className="h-screen w-screen bg-zinc-950 text-zinc-200 overflow-hidden">
+        <ModsManagerWindow />
+      </div>
+    )
+  }
+
   // === RENDERIZADO NORMAL DEL LAUNCHER ===
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-200 select-none overflow-hidden border border-zinc-800/50 rounded-xl relative">
+    <div className="flex h-screen bg-zinc-950 text-zinc-200 select-none overflow-hidden border border-zinc-800/50 relative">
       <Sidebar 
         activeView={currentView} 
         onNavigate={handleNavigation} 
@@ -170,19 +191,32 @@ function App(): React.JSX.Element {
               {appState.downloadSpeed}
             </span>
           </div>
-          <div className="w-full bg-zinc-800/50 rounded-full h-2.5 mb-2 overflow-hidden border border-zinc-800">
-            <div
-              className="bg-indigo-500 h-full rounded-full transition-all duration-300 relative overflow-hidden"
-              style={{ width: `${appState.downloadProgress}%` }}
-            >
-              <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="text-xs font-medium text-zinc-500">
-              {appState.downloadProgress}% completado
-            </span>
-          </div>
+          {appState.downloadFile ? (
+            <>
+              <div className="text-sm text-zinc-300 break-words mb-2">
+                Descargando archivo: <span className="font-semibold text-zinc-100">{appState.downloadFile}</span>
+              </div>
+              {appState.downloadRemaining && (
+                <div className="text-xs text-zinc-400">{appState.downloadRemaining}</div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="w-full bg-zinc-800/50 rounded-full h-2.5 mb-2 overflow-hidden border border-zinc-800">
+                <div
+                  className="bg-indigo-500 h-full rounded-full transition-all duration-300 relative overflow-hidden"
+                  style={{ width: `${appState.downloadProgress}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-medium text-zinc-500">
+                  {appState.downloadProgress}% completado
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

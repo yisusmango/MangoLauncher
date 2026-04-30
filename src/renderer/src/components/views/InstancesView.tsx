@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import InstanceCard from './InstanceCard'
-import ModsManager from './ModsManager'
 
 interface MinecraftInstance {
   id: string
@@ -14,8 +13,6 @@ interface MinecraftInstance {
 function InstancesView(): React.JSX.Element {
   const [instances, setInstances] = useState<MinecraftInstance[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
-  // Estado para controlar qué instancia se está configurando (null = ninguna, muestra la lista)
-  const [configuringInstance, setConfiguringInstance] = useState<MinecraftInstance | null>(null)
 
   useEffect(() => {
     const loadInstances = async (): Promise<void> => {
@@ -54,52 +51,6 @@ function InstancesView(): React.JSX.Element {
     } else {
       console.warn('Falta conectar el Preload y el Main para abrir la ventana.')
     }
-  }
-
-  // --- NUEVA VISTA DE CONFIGURACIÓN ---
-  // Si hay una instancia seleccionada, mostramos su panel de mods en lugar de la cuadrícula
-  if (configuringInstance) {
-    return (
-      <div className="w-full h-full flex flex-col">
-        {/* Cabecera con botón de regreso */}
-        <div className="mb-6 flex items-center gap-4">
-          <button 
-            onClick={() => setConfiguringInstance(null)}
-            className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors flex items-center justify-center"
-          >
-             {/* Icono de flecha simple */}
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
-          <div>
-            <h2 className="text-2xl font-bold text-zinc-50 flex items-center gap-2">
-              <span className="text-xl">{configuringInstance.icon}</span> 
-              Configurando: {configuringInstance.name}
-            </h2>
-            <p className="text-sm text-zinc-400 font-mono">
-              v{configuringInstance.version} • {configuringInstance.loader}
-            </p>
-          </div>
-        </div>
-
-        {/* Panel de Gestión (El "cerebro") */}
-        <div className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 overflow-hidden flex flex-col">
-           <h3 className="text-lg font-bold text-zinc-200 mb-4 flex items-center gap-2">
-             <span>🧩</span> Gestor de Mods
-           </h3>
-<p className="text-zinc-500 mb-4 text-sm">
-          Busca y descarga mods directamente desde Modrinth para esta instancia.
-        </p>
-        {/* AQUÍ INYECTAMOS NUESTRO NUEVO COMPONENTE */}
-        <ModsManager 
-          instanceId={configuringInstance.id} 
-          instanceVersion={configuringInstance.version} 
-          instanceLoader={configuringInstance.loader} 
-        />
-     </div>
-   </div>
- )
   }
 
   // --- VISTA NORMAL DE INSTANCIAS ---
@@ -143,8 +94,13 @@ function InstancesView(): React.JSX.Element {
                 key={instance.id} 
                 instance={instance} 
                 onDelete={handleDelete}
-                // Pasamos la función para abrir la configuración
-                onConfigure={() => setConfiguringInstance(instance)} 
+                onConfigure={() => {
+                  // @ts-ignore
+                  if (window.api && window.api.openModsManagerWindow) {
+                    // @ts-ignore
+                    window.api.openModsManagerWindow(instance.id, instance.name, instance.version, instance.loader)
+                  }
+                }} 
               />
             ))}
 

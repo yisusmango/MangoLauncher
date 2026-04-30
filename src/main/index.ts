@@ -100,6 +100,7 @@ interface MinecraftInstance {
   name: string
   version: string
   loader: string
+  loaderVersion?: string
   playtime: number
   icon: string
 }
@@ -171,13 +172,183 @@ const defaultSettings: AppSettings = {
 
 // --- SISTEMA INTELIGENTE DE JAVA ---
 async function getJavaMajorVersion(mcVersion: string): Promise<number> {
-  const parts = mcVersion.split('.')
-  const minor = parseInt(parts[1]) || 0
-  const patch = parseInt(parts[2]) || 0
-  
-  if (minor <= 16) return 8 
-  if (minor >= 21 || (minor === 20 && patch >= 5)) return 21 
-  return 17 
+  const parts = mcVersion.split('.').map((part) => parseInt(part, 10) || 0)
+  let major = parts[0]
+  let minor = parts[1] || 0
+
+  if (major === 1) {
+    major = minor
+    minor = parts[2] || 0
+  }
+
+  if (major <= 16) return 8
+  if (major >= 17 && major <= 19) return 17
+  if (major === 20) return 20
+  if (major >= 21 && major <= 25) return major
+  if (major >= 26) return 25
+  return 17
+}
+
+function parseJavaMajorVersion(output: string): number | null {
+  const match = output.match(/version "(\d+)(?:\.(\d+))?(?:\.(\d+))?/) || output.match(/version "1\.(\d+)/)
+  if (!match) return null
+
+  const first = parseInt(match[1], 10)
+  if (first === 1 && match[2]) {
+    return parseInt(match[2], 10)
+  }
+  return first
+}
+
+async function getJavaMajorFromBinary(javaPath: string): Promise<number | null> {
+  try {
+    const { stderr } = await execAsync(`"${javaPath}" -version`)
+    const major = parseJavaMajorVersion(stderr)
+    return major
+  } catch (error) {
+    return null
+  }
+}
+
+async function findJavaExe(dir: string): Promise<string | null> {
+  if (!fsSync.existsSync(dir)) return null
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      const found = await findJavaExe(fullPath)
+      if (found) return found
+    } else if (entry.name === 'java.exe' || entry.name === 'java') {
+      if (path.basename(path.dirname(fullPath)) === 'bin') {
+        return fullPath
+      }
+    }
+  }
+  return null
+}
+
+async function findCompatibleJava(requestedMajor: number): Promise<string | undefined> {
+  const javaRoot = path.join(app.getPath('userData'), 'java')
+  if (!fsSync.existsSync(javaRoot)) return undefined
+
+  let bestMatch: { path: string; major: number } | undefined
+  const entries = await fs.readdir(javaRoot, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const candidateRoot = path.join(javaRoot, entry.name)
+    const candidate = await findJavaExe(candidateRoot)
+    if (!candidate) continue
+
+    const major = await getJavaMajorFromBinary(candidate)
+    if (major === null) continue
+
+    if (major === requestedMajor) {
+      return candidate
+    }
+
+    if (major > requestedMajor) {
+      const isModernCompatible = requestedMajor >= 17
+      if (isModernCompatible) {
+        if (!bestMatch || major < bestMatch.major) {
+          bestMatch = { path: candidate, major }
+        }
+      }
+    }
+  }
+
+  return bestMatch?.path
+}
+
+interface AssetDownloadMetadata {
+  hashToAssetPath: Record<string, string>
+  hashToSize: Record<string, number>
+  missingBytes: number
+  totalBytes: number
+  totalAssets: number
+  missingAssets: number
+}
+
+async function buildAssetDownloadMetadata(instancePath: string, versionNumber: string, customVersion?: string): Promise<AssetDownloadMetadata | null> {
+  try {
+    const versionFolder = customVersion || versionNumber
+    const versionJsonPath = path.join(instancePath, 'versions', versionFolder, `${versionFolder}.json`)
+    if (!fsSync.existsSync(versionJsonPath)) return null
+
+    const versionJsonRaw = await fs.readFile(versionJsonPath, 'utf8')
+    const versionJson = JSON.parse(versionJsonRaw) as any
+    const assetIndex = versionJson.assetIndex
+    if (!assetIndex || !assetIndex.id) return null
+
+    const assetIndexId = assetIndex.id as string
+    const assetIndexUrl = assetIndex.url as string | undefined
+    const assetIndexesDir = path.join(instancePath, 'assets', 'indexes')
+    const assetIndexPath = path.join(assetIndexesDir, `${assetIndexId}.json`)
+
+    if (!fsSync.existsSync(assetIndexPath)) {
+      if (!assetIndexUrl) return null
+      await fs.mkdir(assetIndexesDir, { recursive: true })
+      const response = await fetch(assetIndexUrl)
+      if (!response.ok) {
+        console.warn(`[Asset Metadata] No se pudo descargar el asset index ${assetIndexId}: ${response.status}`)
+        return null
+      }
+      const body = await response.text()
+      await fs.writeFile(assetIndexPath, body, 'utf8')
+    }
+
+    const assetIndexRaw = await fs.readFile(assetIndexPath, 'utf8')
+    const assetIndexJson = JSON.parse(assetIndexRaw) as { objects?: Record<string, { hash: string; size: number }> }
+    const objects = assetIndexJson.objects || {}
+    const assetRoot = path.join(instancePath, 'assets', 'objects')
+
+    const hashToAssetPath: Record<string, string> = {}
+    const hashToSize: Record<string, number> = {}
+    let totalBytes = 0
+    let missingBytes = 0
+    let totalAssets = 0
+    let missingAssets = 0
+
+    for (const assetPath in objects) {
+      const object = objects[assetPath]
+      const hash = object.hash
+      const size = Number(object.size) || 0
+      hashToAssetPath[hash] = assetPath
+      hashToSize[hash] = size
+      totalBytes += size
+      totalAssets += 1
+
+      const subhash = hash.slice(0, 2)
+      const objectFile = path.join(assetRoot, subhash, hash)
+      if (!fsSync.existsSync(objectFile)) {
+        missingAssets += 1
+        missingBytes += size
+      } else {
+        try {
+          const stats = fsSync.statSync(objectFile)
+          if (stats.size !== size) {
+            missingAssets += 1
+            missingBytes += size
+          }
+        } catch {
+          missingAssets += 1
+          missingBytes += size
+        }
+      }
+    }
+
+    return {
+      hashToAssetPath,
+      hashToSize,
+      missingBytes,
+      totalBytes,
+      totalAssets,
+      missingAssets
+    }
+  } catch (error) {
+    console.warn('[Asset Metadata] Error construyendo metadata de assets:', error)
+    return null
+  }
 }
 
 async function ensureJava(mcVersion: string, event: Electron.IpcMainEvent): Promise<string | undefined> {
@@ -203,8 +374,20 @@ async function ensureJava(mcVersion: string, event: Electron.IpcMainEvent): Prom
 
   const existingJava = await findJavaExe(javaDir)
   if (existingJava) {
-    console.log(`[Java Setup] Java ${javaMajor} ya está listo en: ${existingJava}`)
-    return existingJava
+    const existingMajor = await getJavaMajorFromBinary(existingJava)
+    if (existingMajor && (existingMajor === javaMajor || (javaMajor >= 17 && existingMajor > javaMajor))) {
+      console.log(`[Java Setup] Java compatible ya está listo en: ${existingJava} (detectado v${existingMajor})`)
+      return existingJava
+    }
+
+    console.warn(`[Java Setup] Java encontrado en ${existingJava} no es compatible con ${javaMajor} (detected v${existingMajor}). Buscando otra versión compatible...`)
+  }
+
+  const fallbackJava = await findCompatibleJava(javaMajor)
+  if (fallbackJava) {
+    const fallbackMajor = await getJavaMajorFromBinary(fallbackJava)
+    console.log(`[Java Setup] Usando Java ya instalado compatible en: ${fallbackJava} (v${fallbackMajor})`)
+    return fallbackJava
   }
 
   event.sender.send('download-progress', {
@@ -251,8 +434,7 @@ async function ensureJava(mcVersion: string, event: Electron.IpcMainEvent): Prom
       percentage: 100, speed: '', phase: `Instalando Java ${javaMajor}...`, isDownloading: true
     })
     console.log(`[Java Setup] Extrayendo archivo: ${tempFile}`)
-    
-    await execAsync(`tar -xf "${tempFile}" -C "${javaDir}"`)
+    await extractArchive(tempFile, javaDir, isWin)
     await fs.unlink(tempFile)
 
     const extractedJava = await findJavaExe(javaDir)
@@ -347,27 +529,42 @@ async function fetchMinecraftVersions(): Promise<string[]> {
   }
 }
 
-async function setupFabric(instancePath: string, mcVersion: string): Promise<string | null> {
+async function setupFabric(instancePath: string, mcVersion: string, requestedLoaderVersion?: string): Promise<string | null> {
   const modsPath = path.join(instancePath, 'mods')
-  await fs.mkdir(modsPath, { recursive: true }) 
+  await fs.mkdir(modsPath, { recursive: true })
 
   try {
     console.log(`[Fabric Setup] Buscando loader para la versión ${mcVersion}...`)
-    
+
     const loaderRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}`)
-    const loaders = await loaderRes.json()
-    if (!loaders || loaders.length === 0) throw new Error('No hay loader de Fabric para esta versión')
+    if (!loaderRes.ok) {
+      throw new Error(`Error al consultar loaders de Fabric: ${loaderRes.status}`)
+    }
 
-    const latestLoader = loaders[0].loader.version
-    const customVersionName = `fabric-${mcVersion}-${latestLoader}`
+    const loaders: any[] = await loaderRes.json()
+    if (!Array.isArray(loaders) || loaders.length === 0) throw new Error('No hay loader de Fabric para esta versión')
 
+    let selectedLoaderVersion = loaders[0].loader.version
+    if (requestedLoaderVersion) {
+      const matched = loaders.find((entry) => entry.loader?.version === requestedLoaderVersion)
+      if (matched) {
+        selectedLoaderVersion = requestedLoaderVersion
+      } else {
+        console.warn(`[Fabric Setup] La versión de loader solicitada (${requestedLoaderVersion}) no está disponible, usando ${selectedLoaderVersion}`)
+      }
+    }
+
+    const customVersionName = `fabric-${mcVersion}-${selectedLoaderVersion}`
     const versionDir = path.join(instancePath, 'versions', customVersionName)
     await fs.mkdir(versionDir, { recursive: true })
     const jsonPath = path.join(versionDir, `${customVersionName}.json`)
 
-    const profileRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${latestLoader}/profile/json`)
-    const profileJson = await profileRes.json()
+    const profileRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${selectedLoaderVersion}/profile/json`)
+    if (!profileRes.ok) {
+      throw new Error(`Error al descargar el perfil de Fabric: ${profileRes.status}`)
+    }
 
+    const profileJson = await profileRes.json()
     await fs.writeFile(jsonPath, JSON.stringify(profileJson, null, 2))
     console.log(`[Fabric Setup] Configurado correctamente: ${customVersionName}`)
 
@@ -375,6 +572,16 @@ async function setupFabric(instancePath: string, mcVersion: string): Promise<str
   } catch (err) {
     console.error('[Fabric Setup] Error al configurar Fabric:', err)
     return null
+  }
+}
+
+async function extractArchive(tempFile: string, destination: string, isWin: boolean): Promise<void> {
+  if (isWin) {
+    const quotedTemp = `"${tempFile.replace(/"/g, '""')}"`
+    const quotedDest = `"${destination.replace(/"/g, '""')}"`
+    await execAsync(`powershell -NoProfile -Command Expand-Archive -LiteralPath ${quotedTemp} -DestinationPath ${quotedDest} -Force`)
+  } else {
+    await execAsync(`tar -xf "${tempFile}" -C "${destination}"`)
   }
 }
 
@@ -441,8 +648,9 @@ async function deleteScreenshot(instanceId: string, fileName: string): Promise<b
   }
 }
 
-// --- NUEVO: REFERENCIA A LA VENTANA DE CREACIÓN ---
+// --- NUEVAS REFERENCIAS A LAS VENTANAS SECUNDARIAS ---
 let createInstanceWin: BrowserWindow | null = null
+let modsManagerWin: BrowserWindow | null = null
 
 function openCreateInstanceWindow(parentWindow: BrowserWindow): void {
   if (createInstanceWin) {
@@ -480,6 +688,46 @@ function openCreateInstanceWindow(parentWindow: BrowserWindow): void {
     createInstanceWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/create-instance`)
   } else {
     createInstanceWin.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'create-instance' })
+  }
+}
+
+function openModsManagerWindow(parentWindow: BrowserWindow, instanceId: string, instanceName: string, version: string, loader: string): void {
+  if (modsManagerWin) {
+    modsManagerWin.focus()
+    return
+  }
+
+  modsManagerWin = new BrowserWindow({
+    width: 1180,
+    height: 760,
+    parent: parentWindow,
+    modal: false,
+    show: false,
+    autoHideMenuBar: true,
+    resizable: true,
+    icon: path.join(__dirname, '../../resources/icon.png'),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      webSecurity: false,
+      allowRunningInsecureContent: true
+    }
+  })
+
+  modsManagerWin.on('ready-to-show', () => {
+    modsManagerWin?.show()
+  })
+
+  modsManagerWin.on('closed', () => {
+    modsManagerWin = null
+  })
+
+  const hash = `mods-manager?instanceId=${encodeURIComponent(instanceId)}&instanceName=${encodeURIComponent(instanceName)}&version=${encodeURIComponent(version)}&loader=${encodeURIComponent(loader)}`
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    modsManagerWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/${hash}`)
+  } else {
+    modsManagerWin.loadFile(join(__dirname, '../renderer/index.html'), { hash })
   }
 }
 
@@ -653,10 +901,11 @@ app.whenReady().then(() => {
     }
 
     const newInstance: MinecraftInstance = {
-      id: uniqueId, 
+      id: uniqueId,
       name: data.name,
       version: data.version,
       loader: data.loader || 'Vanilla',
+      loaderVersion: data.loaderVersion,
       playtime: 0,
       icon: data.icon || '📦'
     }
@@ -676,6 +925,13 @@ app.whenReady().then(() => {
     const parent = BrowserWindow.fromWebContents(event.sender)
     if (parent) {
       openCreateInstanceWindow(parent)
+    }
+  })
+
+  ipcMain.on('open-mods-manager-window', (event, instanceId: string, instanceName: string, version: string, loader: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    if (parent) {
+      openModsManagerWindow(parent, instanceId, instanceName, version, loader)
     }
   })
 
@@ -705,7 +961,9 @@ app.whenReady().then(() => {
       const instancePath = path.join(app.getPath('userData'), 'instances', instance.id)
       await fs.mkdir(instancePath, { recursive: true })
 
-      if (instance.loader === 'Fabric') {
+      const isFabricInstance = instance.loader.toLowerCase().includes('fabric')
+
+      if (isFabricInstance) {
         event.sender.send('download-progress', {
           percentage: 0, speed: '', phase: 'Preparando entorno de Java y Fabric...', isDownloading: true
         });
@@ -713,10 +971,16 @@ app.whenReady().then(() => {
 
       const [customJavaPath, fabricVersion] = await Promise.all([
         ensureJava(instance.version, event),
-        instance.loader === 'Fabric' 
-          ? setupFabric(instancePath, instance.version) 
+        isFabricInstance
+          ? setupFabric(instancePath, instance.version, instance.loaderVersion)
           : Promise.resolve(undefined)
       ]);
+
+      const assetMetadata = await buildAssetDownloadMetadata(instancePath, instance.version, fabricVersion || undefined)
+
+      if (isFabricInstance && !fabricVersion) {
+        throw new Error('No se pudo configurar Fabric para la versión seleccionada.')
+      }
 
       let auth;
       if (account && account.type === 'microsoft') {
@@ -733,17 +997,21 @@ app.whenReady().then(() => {
       }
 
       const opts: any = {
-        authorization: auth as any, 
+        authorization: auth as any,
         root: instancePath,
         version: {
           number: instance.version,
-          type: 'release'
+          type: fabricVersion ? 'custom' : 'release'
         },
         memory: {
-          max: `${currentSettings.javaMaxMemory}G`, 
-          min: `${currentSettings.javaMinMemory}G`  
+          max: `${currentSettings.javaMaxMemory}G`,
+          min: `${currentSettings.javaMinMemory}G`
         },
-        javaPath: customJavaPath 
+        javaPath: customJavaPath,
+        overrides: {
+          maxSockets: 8
+        },
+        timeout: 300000
       }
 
       if (fabricVersion) {
@@ -794,50 +1062,68 @@ app.whenReady().then(() => {
       let currentPhase = '';
       launcher.on('download-status', (status: Record<string, unknown>) => {
         try {
+          console.log(`[Raw Status] Tipo: ${status.type} | Descargado: ${status.current} / ${status.total}`);
+
           const type = (status.type as string) || 'archivos';
-          const current = (status.current as number) || 0;
-          const total = (status.total as number) || 0;
+          const current = Number(status.current) || 0;
+          const total = Number(status.total) || 0;
+          const currentTimestamp = Date.now();
 
           if (currentPhase !== type) {
             currentPhase = type;
             downloadTracker.lastBytesDownloaded = current;
-            downloadTracker.lastTimestamp = Date.now();
+            downloadTracker.lastTimestamp = currentTimestamp;
           }
 
-          if (type === 'assets') {
-            downloadTracker.lastBytesDownloaded = current;
-            downloadTracker.lastTimestamp = Date.now();
-            
-            event.sender.send('download-progress', {
-              percentage: 99, speed: '...   ', phase: 'Descargando sonidos y texturas...', isDownloading: true
-            });
-            return; 
+          const phaseNames: Record<string, string> = {
+            classes: 'Librerías',
+            jar: 'Cliente',
+            natives: 'Nativos',
+            assets: 'Sonidos y texturas',
+            libraries: 'Librerías',
+            metadata: 'Metadatos',
+            resources: 'Recursos',
+            client: 'Cliente'
+          };
+          const phaseName = phaseNames[type] || type;
+
+          let percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+          let speed = '';
+          const currentFile = typeof status.name === 'string' ? status.name : undefined;
+          let downloadFile: string | undefined
+          let remainingBytes: number | undefined
+          let totalBytes: number | undefined
+
+          if (type === 'assets' && currentFile) {
+            const fileLabel = assetMetadata?.hashToAssetPath[currentFile]
+            downloadFile = fileLabel || `assets/objects/${currentFile.slice(0, 2)}/${currentFile}`
+            totalBytes = assetMetadata?.missingBytes
+            remainingBytes = assetMetadata ? Math.max(assetMetadata.missingBytes - current, 0) : undefined
           }
 
           if (total > 0) {
-            const percentage = Math.round((current / total) * 100)
-            const currentTimestamp = Date.now()
-            const timeDelta = Math.max(currentTimestamp - downloadTracker.lastTimestamp, 1)
-            const bytesDelta = Math.max(current - downloadTracker.lastBytesDownloaded, 0)
+            const timeDelta = Math.max(currentTimestamp - downloadTracker.lastTimestamp, 1);
+            const bytesDelta = Math.max(current - downloadTracker.lastBytesDownloaded, 0);
 
             if (timeDelta >= 500) {
-              const speedMBps = (bytesDelta / timeDelta) * 1000 / (1024 * 1024)
-              
-              downloadTracker.lastBytesDownloaded = current
-              downloadTracker.lastTimestamp = currentTimestamp
-
-              const phaseNames: Record<string, string> = {
-                'classes': 'Librerías', 'jar': 'Cliente', 'natives': 'Nativos'
-              };
-              const phaseName = phaseNames[type] || type;
-
-              event.sender.send('download-progress', {
-                percentage: percentage, speed: `${speedMBps.toFixed(2)} MB/s`, phase: `Descargando ${phaseName.toLowerCase()}...`, isDownloading: true
-              })
+              const speedMBps = (bytesDelta / timeDelta) * 1000 / (1024 * 1024);
+              speed = `${speedMBps.toFixed(2)} MB/s`;
+              downloadTracker.lastBytesDownloaded = current;
+              downloadTracker.lastTimestamp = currentTimestamp;
             }
           }
+
+          event.sender.send('download-progress', {
+            percentage,
+            speed,
+            phase: `Descargando ${phaseName.toLowerCase()}...`,
+            isDownloading: true,
+            downloadFile,
+            remainingBytes,
+            totalBytes
+          });
         } catch (err) {
-          console.error("Error calculando progreso visual:", err)
+          console.error('Error calculando progreso visual:', err)
         }
       })
 
@@ -869,9 +1155,11 @@ app.whenReady().then(() => {
       await saveInstancesToFile(filteredInstances)
 
       const instanceFolder = path.join(app.getPath('userData'), 'instances', id)
-      await fs.rm(instanceFolder, { recursive: true, force: true })
+      fs.rm(instanceFolder, { recursive: true, force: true })
+        .then(() => console.log(`[Main Process] Instancia ${id} eliminada del disco.`))
+        .catch((error) => console.error(`[Main Process] Error eliminando carpeta de instancia ${id}:`, error))
 
-      console.log(`[Main Process] Instancia ${id} eliminada exitosamente`)
+      console.log(`[Main Process] Instancia ${id} eliminada de la lista.`)
       return filteredInstances
     } catch (error) {
       console.error(`[Main Process] Error al eliminar instancia: ${id}`, error)
@@ -925,13 +1213,67 @@ app.whenReady().then(() => {
   })
 
 // --- BUSCAR MODS ---
-  ipcMain.handle('search-mods', async (_, query: string) => {
+  ipcMain.handle('search-mods', async (_, query: string, mcVersion?: string, loader?: string) => {
     try {
-      const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(query)}&facets=[["categories:fabric"]]&limit=15`
+      const versionMap: Record<string, string> = {
+        '26.1': '1.21.1'
+      }
+      const facets: string[][] = [["categories:fabric"]]
+
+      if (mcVersion) {
+        const mappedVersion = versionMap[mcVersion] || mcVersion
+        facets.unshift([`versions:${mappedVersion}`])
+      }
+
+      if (loader) {
+        const loaderString = loader.toLowerCase()
+        const loaderCategory = loaderString.includes('fabric')
+          ? 'fabric'
+          : loaderString.includes('quilt')
+          ? 'quilt'
+          : loaderString.includes('forge')
+          ? 'forge'
+          : loaderString.includes('neoforge')
+          ? 'neoforge'
+          : loaderString.includes('babric')
+          ? 'babric'
+          : 'fabric'
+        facets.push([`categories:${loaderCategory}`])
+      }
+
+      const params = new URLSearchParams({
+        query: query || '',
+        facets: JSON.stringify(facets),
+        limit: '30',
+        sort: 'downloads'
+      })
+
+      const url = `https://api.modrinth.com/v2/search?${params}`
       const response = await fetch(url)
       if (!response.ok) throw new Error(`Error: ${response.statusText}`)
       const data: ModrinthSearchResult = await response.json()
-      return data.hits
+
+      const mappedVersion = mcVersion ? versionMap[mcVersion] || mcVersion : undefined
+      const loaderCategory = loader ? (
+        loader.toLowerCase().includes('fabric') ? 'fabric' :
+        loader.toLowerCase().includes('quilt') ? 'quilt' :
+        loader.toLowerCase().includes('forge') ? 'forge' :
+        loader.toLowerCase().includes('neoforge') ? 'neoforge' :
+        loader.toLowerCase().includes('babric') ? 'babric' :
+        undefined
+      ) : undefined
+
+      const compatibleHits = data.hits.filter((hit: any) => {
+        if (mappedVersion && Array.isArray(hit.versions) && !hit.versions.includes(mappedVersion)) {
+          return false
+        }
+        if (loaderCategory && Array.isArray(hit.categories) && !hit.categories.includes(loaderCategory)) {
+          return false
+        }
+        return true
+      })
+
+      return compatibleHits
     } catch (error) {
       console.error('[Modrinth] Error:', error)
       throw error
@@ -942,64 +1284,90 @@ app.whenReady().then(() => {
 // --- INSTALAR MOD Y SUS DEPENDENCIAS (RECURSIVO) ---
   ipcMain.handle('install-mod', async (_, projectId: string, instanceId: string, mcVersion: string, loader: string) => {
     try {
-      const loaderParam = loader.toLowerCase()
+      const loaderString = loader.toLowerCase()
+      const loaderParam = loaderString.includes('fabric')
+        ? 'fabric'
+        : loaderString.includes('quilt')
+        ? 'quilt'
+        : loaderString.includes('forge')
+        ? 'forge'
+        : loaderString.includes('neoforge')
+        ? 'neoforge'
+        : loaderString.includes('babric')
+        ? 'babric'
+        : 'fabric'
       const modsPath = path.join(app.getPath('userData'), 'instances', instanceId, 'mods')
 
-      if (!fsSync.existsSync(modsPath)) {
-        await fsSync.promises.mkdir(modsPath, { recursive: true })
+      await fsSync.promises.mkdir(modsPath, { recursive: true })
+
+      const versionMap: Record<string, string> = {
+        '26.1': '1.21.1'
       }
+      const mappedVersion = versionMap[mcVersion] || mcVersion
 
       const processedProjects = new Set<string>()
-      // NUEVO: Arreglo para guardar los nombres de los archivos descargados
-      const downloadedFiles: string[] = [] 
+      const downloadedFiles: string[] = []
 
       const downloadModWithDeps = async (id: string, isVersionId: boolean = false) => {
-        if (processedProjects.has(id)) return 
+        if (processedProjects.has(id)) return
 
-        let versionData
+        let versionData: any
         if (isVersionId) {
           const res = await fetch(`https://api.modrinth.com/v2/version/${id}`)
-          if (!res.ok) return
+          if (!res.ok) throw new Error(`Failed to fetch version ${id}: ${res.status}`)
           versionData = await res.json()
         } else {
-          const url = `https://api.modrinth.com/v2/project/${id}/version?game_versions=["${mcVersion}"]&loaders=["${loaderParam}"]`
+          const params = new URLSearchParams({
+            game_versions: JSON.stringify([mappedVersion]),
+            loaders: JSON.stringify([loaderParam])
+          })
+          const url = `https://api.modrinth.com/v2/project/${id}/version?${params}`
           const res = await fetch(url)
-          if (!res.ok) return
+          if (!res.ok) throw new Error(`Failed to fetch project ${id}: ${res.status}`)
           const versions = await res.json()
-          if (versions.length === 0) return 
+          if (!Array.isArray(versions) || versions.length === 0) {
+            throw new Error(`No compatible Modrinth version found for project ${id} with MC ${mappedVersion} and loader ${loaderParam}`)
+          }
           versionData = versions[0]
         }
 
-        processedProjects.add(versionData.project_id || id)
+        const projectIdToMark = versionData.project_id || id
+        if (!projectIdToMark) throw new Error('No project_id available for downloaded version')
+        processedProjects.add(projectIdToMark)
 
-        const primaryFile = versionData.files.find((f: any) => f.primary) || versionData.files[0]
-        if (!primaryFile) return
+        const files = Array.isArray(versionData.files) ? versionData.files : []
+        const validFiles = files.filter((file: any) => typeof file.filename === 'string' && file.filename.toLowerCase().endsWith('.jar'))
+        if (validFiles.length === 0) {
+          throw new Error(`No valid .jar files available for project ${projectIdToMark}`)
+        }
+
+        const primaryFile = validFiles.find((file: any) => file.primary) || validFiles[0]
+        if (!primaryFile || !primaryFile.url) {
+          throw new Error(`No downloadable primary .jar found for project ${projectIdToMark}`)
+        }
 
         const filePath = path.join(modsPath, primaryFile.filename)
-
         if (!fsSync.existsSync(filePath)) {
           console.log(`[Modrinth] Descargando: ${primaryFile.filename}...`)
           const fileResponse = await fetch(primaryFile.url)
-          
-          if (fileResponse.ok) {
-            const fileStream = fsSync.createWriteStream(filePath)
-            const body = Readable.fromWeb(fileResponse.body as any)
-            body.pipe(fileStream)
-            await finished(fileStream)
-            
-            // Guardamos el nombre del archivo recién descargado
-            downloadedFiles.push(primaryFile.filename)
+          if (!fileResponse.ok) {
+            throw new Error(`Failed to download ${primaryFile.filename}: ${fileResponse.status}`)
           }
+
+          const fileStream = fsSync.createWriteStream(filePath)
+          const body = Readable.fromWeb(fileResponse.body as any)
+          body.pipe(fileStream)
+          await finished(fileStream)
+          downloadedFiles.push(primaryFile.filename)
         }
 
-        if (versionData.dependencies && versionData.dependencies.length > 0) {
+        if (Array.isArray(versionData.dependencies)) {
           for (const dep of versionData.dependencies) {
-            if (dep.dependency_type === 'required') {
-              if (dep.version_id) {
-                await downloadModWithDeps(dep.version_id, true)
-              } else if (dep.project_id) {
-                await downloadModWithDeps(dep.project_id, false)
-              }
+            if (dep.dependency_type !== 'required') continue
+            if (dep.version_id) {
+              await downloadModWithDeps(dep.version_id, true)
+            } else if (dep.project_id) {
+              await downloadModWithDeps(dep.project_id, false)
             }
           }
         }
@@ -1007,18 +1375,22 @@ app.whenReady().then(() => {
 
       await downloadModWithDeps(projectId, false)
 
-      // Retornamos el arreglo de archivos descargados a la interfaz
       if (downloadedFiles.length === 0) {
-        return { success: true, message: 'El mod y sus dependencias ya estaban instalados.', downloadedFiles }
-      } else if (downloadedFiles.length === 1) {
-        return { success: true, message: `Mod instalado: ${downloadedFiles[0]}`, downloadedFiles }
-      } else {
-        return { success: true, message: `Se instalaron ${downloadedFiles.length} archivos.`, downloadedFiles }
+        return {
+          success: false,
+          message: 'No se descargó ningún archivo válido. Puede que la versión no sea compatible o el mod no tenga un .jar instalable.',
+          downloadedFiles: []
+        }
       }
 
+      return {
+        success: true,
+        message: downloadedFiles.length === 1 ? `Mod instalado: ${downloadedFiles[0]}` : `Se instalaron ${downloadedFiles.length} archivos.`,
+        downloadedFiles
+      }
     } catch (error: any) {
-      console.error('[Modrinth] Error crítico instalando mod:', error)
-      return { success: false, message: error.message }
+      console.error('[Modrinth] Error instalando mod:', error)
+      return { success: false, message: error.message || 'Error desconocido instalando mod.', downloadedFiles: [] }
     }
   })
 

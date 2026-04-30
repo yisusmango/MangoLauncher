@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-interface DownloadProgressData { percentage: number; speed: string; phase?: string; isDownloading?: boolean }
+interface DownloadProgressData { percentage: number; speed: string; phase?: string; isDownloading?: boolean; downloadFile?: string; remainingBytes?: number; totalBytes?: number }
 interface MinecraftInstance { id: string; name: string; version: string; loader: string; playtime: number; icon: string }
 interface CreateInstanceData { name: string; version: string; loader?: string; icon?: string }
 interface AppSettings { javaMinMemory: string; javaMaxMemory: string; theme: string; autoUpdate: boolean }
@@ -37,7 +37,7 @@ const api = {
   installMod: async (projectId: string, instanceId: string, mcVersion: string, loader: string) => { 
   return await ipcRenderer.invoke('install-mod', projectId, instanceId, mcVersion, loader) 
 },
-  searchMods: async (query: string) => { return await ipcRenderer.invoke('search-mods', query) },
+  searchMods: async (query: string, mcVersion?: string, loader?: string) => { return await ipcRenderer.invoke('search-mods', query, mcVersion, loader) },
   getInstalledMods: async (instanceId: string) => { return await ipcRenderer.invoke('get-installed-mods', instanceId) },
   toggleMod: async (instanceId: string, fileName: string) => { return await ipcRenderer.invoke('toggle-mod', instanceId, fileName) },
   deleteMod: async (instanceId: string, fileName: string) => { return await ipcRenderer.invoke('delete-mod', instanceId, fileName) },
@@ -48,6 +48,9 @@ const api = {
   // === Controladores de la Ventana Secundaria ===
   openCreateInstanceWindow: (): void => {
     ipcRenderer.send('open-create-instance-window')
+  },
+  openModsManagerWindow: (instanceId: string, instanceName: string, version: string, loader: string): void => {
+    ipcRenderer.send('open-mods-manager-window', instanceId, instanceName, version, loader)
   },
   closeCreateInstanceWindow: (): void => {
     ipcRenderer.send('close-create-instance-window')

@@ -112,7 +112,8 @@ function CreateInstanceWindow(): React.JSX.Element {
       await window.api.createInstance({
         name: finalName,
         version: formData.version,
-        loader: formData.loader === 'Fabric' ? `Fabric ${formData.loaderVersion}` : 'Vanilla',
+        loader: formData.loader,
+        loaderVersion: formData.loader === 'Fabric' ? formData.loaderVersion : undefined,
         icon: formData.loader === 'Fabric' ? '🧶' : '📦'
       })
     } catch (error) {
