@@ -12,6 +12,8 @@ import { Client, Authenticator } from 'minecraft-launcher-core'
 import * as msmc from 'msmc'
 import { autoUpdater } from 'electron-updater'
 import DiscordRPC from 'discord-rpc'
+// Importa el archivo package.json para obtener la versión dinámica
+import packageInfo from '../../package.json'
 
 const execAsync = promisify(exec)
 
@@ -73,7 +75,8 @@ async function setDiscordActivity(details: string, state: string, resetTime: boo
       state: state,
       startTimestamp: rpcStartTimestamp,
       largeImageKey: 'mango_logo', 
-      largeImageText: 'Mango Launcher v1.0.7',
+      // CAMBIO AQUÍ: Usamos la versión del package.json
+      largeImageText: `Mango Launcher v${packageInfo.version}`,
       instance: false,
     })
   } catch (err) {
