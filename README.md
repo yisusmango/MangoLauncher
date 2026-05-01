@@ -7,34 +7,39 @@
 
 **Mango Launcher** es un lanzador de Minecraft personalizado, construido desde cero con tecnologías web modernas. Nace con una filosofía clara: **ser una base extremadamente confiable y ligera**. Si le das al botón de jugar, el juego tiene que abrir sin problemas. 
 
-Actualmente es un launcher básico pero robusto, diseñado para escalar con el tiempo y convertirse en la herramienta definitiva para comunidades y grupos de jugadores, facilitando la instalación de mods, la gestión de memoria y la telemetría en tiempo real.
+Actualmente es un launcher robusto, diseñado para escalar con el tiempo y convertirse en la herramienta definitiva para comunidades y grupos de jugadores, facilitando la instalación de mods, la gestión de memoria y la telemetría en tiempo real.
 
 ---
 
 ## ✨ Características Principales
 
 * **📦 Gestión de Instancias Aisladas:** Crea múltiples instalaciones de Minecraft (soporte garantizado para las versiones más recientes, como la 1.21.11 y anteriores). Cada instancia tiene su propia carpeta, aislando mundos y configuraciones.
+* **⚡ Descargas Ultrarrápidas:** Reestructuración extrema del gestor de red interno para descargar los assets y versiones base de Minecraft a máxima velocidad sin cuellos de botella.
+* **🧩 Gestor de Mods Inteligente (Modrinth):** Integración total con la API de Modrinth para buscar e instalar miles de mods directamente desde una UI moderna. Incluye un motor de dependencias que detecta y descarga automáticamente los mods requeridos.
+* **📸 Screenshots Manager:** Galería integrada con un protocolo nativo para visualizar, gestionar y abrir tus capturas de Minecraft directamente desde el launcher.
+* **⚙️ Optimización Dinámica:** Selectores deslizantes (sliders) para una asignación de memoria RAM precisa y un sistema de "Log Cleaner" individual para liberar espacio por instancia.
+* **⏱️ Playtime Tracker:** Registro y acumulación precisa del tiempo de juego por sesión de forma individual en cada instancia.
 * **🔧 Soporte Nativo para Modloaders:** Descarga e inyección automática de **Fabric** con solo un clic al crear la instancia.
-* **🔐 Autenticación Multi-Cuenta:** * Soporte oficial para cuentas de **Microsoft** (Premium) usando la API segura de Xbox/Mojang.
-  * Modo **Offline** para pruebas y desarrollo local.
-* **🖥️ Mango Terminal (Logs en Vivo):** Una consola técnica integrada que captura la salida estándar del juego. Ideal para debuggear fallos de mods o problemas de memoria en tiempo real.
-* **🎮 Discord Rich Presence (RPC):** Integración nativa con Discord. Muestra a tus amigos exactamente qué versión, modloader e instancia estás jugando en ese momento, o si estás navegando por los menús del launcher.
-* **🔄 Actualizaciones Automáticas Silenciosas:** Sistema OTA (Over-The-Air) integrado con notificaciones personalizadas "Mango Toast" que te avisan cuando hay una nueva versión lista para instalar.
-* **🎨 Interfaz Moderna y Fluida:** Diseñado con React y TailwindCSS. Tema oscuro elegante, animaciones suaves y experiencia de usuario minimalista.
+* **🔐 Gestor Multi-Cuenta:** Soporte oficial para cuentas de **Microsoft** (Premium) y modo **Offline**, permitiendo cambiar de usuario sin necesidad de cerrar la aplicación.
+* **🖥️ Mango Terminal:** Una consola técnica integrada que captura la salida estándar del juego en tiempo real. Ideal para debuggear fallos de mods o problemas de memoria.
+* **🎮 Discord Rich Presence (RPC):** Integración nativa con estados dinámicos. Muestra si estás jugando, la versión exacta, el modloader, o incluso si estás gestionando instancias o viendo capturas.
+* **🔄 Actualizaciones "Mango Toast":** Sistema OTA integrado y notificaciones animadas elegantes que te avisan de descargas de mods y nuevas actualizaciones de la app.
 
 ---
 
 ## 🗺️ Roadmap (El Futuro del Mango)
 
-El desarrollo es continuo. Estas son algunas de las funciones planificadas para las próximas versiones:
+El desarrollo es continuo. Estas son algunas de las funciones completadas y los próximos grandes pasos:
 
 - [x] Consola de logs en tiempo real.
 - [x] Integración dinámica con Discord RPC.
 - [x] Soporte base para Fabric.
-- [ ] **Gestor de Memoria Inteligente:** Slider visual para asignar RAM basándose en la memoria total del sistema para evitar cuelgues.
+- [x] Gestor de Memoria Inteligente con sliders.
+- [x] Seguimiento de estadísticas (tiempo jugado).
+- [x] Descarga de mods nativa (Modrinth API).
+- [ ] **Sistema Social y de Amigos (Backend Centralizado):** Creación de un servidor dedicado (24/7 mediante WebSockets) para agregar amigos y ver en tiempo real si están conectados, en qué versión juegan y si están en un servidor o singleplayer.
 - [ ] **Instancias Compartidas (Modpacks en la Nube):** Sistema para descargar automáticamente una lista exacta de mods sincronizada desde un repositorio, para que todos en el servidor tengan exactamente la misma configuración sin tocar archivos `.jar`.
 - [ ] Soporte para Forge / NeoForge.
-- [ ] Seguimiento de estadísticas (tiempo jugado por instancia).
 
 ---
 
@@ -60,37 +65,33 @@ Si quieres clonar el proyecto, modificar el código o compilar tu propia versió
 ### Instalación
 
 1. Clona este repositorio:
-   ```bash
-   git clone https://github.com/yisusmango/MangoLauncher.git
-cd MangoLauncher
-   ```
+
+    git clone https://github.com/yisusmango/MangoLauncher.git
+    cd MangoLauncher
 
 2. Instala las dependencias:
-   ```bash
-   npm install
-   ```
+
+    npm install
 
 ### Desarrollo
 
 Para iniciar la aplicación en modo de desarrollo (con Hot-Reload para React):
-   ```bash
-   npm run dev
-   ```
+
+    npm run dev
 
 ### Compilación (Build)
 
 Para empaquetar el launcher en un archivo ejecutable listo para distribuir:
 
-   ```bash
-   # Para compilar el .exe en Windows
-   npm run build:win
+    # Para compilar el .exe en Windows
+    npm run build:win
 
-   # Para compilar en macOS (.dmg)
-   npm run build:mac
+    # Para compilar en macOS (.dmg)
+    npm run build:mac
 
-   # Para compilar en Linux (.AppImage / .deb)
-   npm run build:linux
-   ```
+    # Para compilar en Linux (.AppImage / .deb)
+    npm run build:linux
+
 Los archivos compilados aparecerán dentro de la carpeta `dist/`.
 
 ---
